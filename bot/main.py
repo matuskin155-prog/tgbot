@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from telegram.ext import Application, CommandHandler
@@ -17,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
+    # Python 3.14 больше не создаёт event loop неявно (PEP 719); python-telegram-bot
+    # 21.x ещё полагается на старое поведение внутри run_polling(), поэтому создаём
+    # и регистрируем loop вручную. Безопасно и для более старых версий Python.
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     settings = load_settings()
     db = Database(settings.database_path)
     calendar = GoogleCalendarClient(
