@@ -18,6 +18,15 @@ def _parse_minutes(raw: str) -> List[int]:
     return sorted(set(minutes), reverse=True)
 
 
+def _parse_admin_ids(raw: str) -> List[int]:
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            ids.append(int(part))
+    return ids
+
+
 @dataclass(frozen=True)
 class Settings:
     telegram_token: str
@@ -28,6 +37,7 @@ class Settings:
     lookahead_hours: int
     timezone: str
     database_path: str
+    admin_chat_ids: List[int]
 
 
 def load_settings() -> Settings:
@@ -46,4 +56,5 @@ def load_settings() -> Settings:
         lookahead_hours=int(os.environ.get("LOOKAHEAD_HOURS", "24")),
         timezone=os.environ.get("TIMEZONE", "UTC"),
         database_path=os.environ.get("DATABASE_PATH", "bot_data.sqlite3"),
+        admin_chat_ids=_parse_admin_ids(os.environ.get("ADMIN_CHAT_IDS", "")),
     )

@@ -23,23 +23,22 @@ class CalendarEvent:
 class GoogleCalendarClient:
     """Тонкая обёртка над Google Calendar API для сервис-аккаунта."""
 
-    def __init__(self, service_account_file: str, calendar_id: str):
+    def __init__(self, service_account_file: str):
         credentials = service_account.Credentials.from_service_account_file(
             service_account_file, scopes=SCOPES
         )
         self._service = build(
             "calendar", "v3", credentials=credentials, cache_discovery=False
         )
-        self._calendar_id = calendar_id
 
-    def get_upcoming_events(self, lookahead_hours: int) -> List[CalendarEvent]:
+    def get_upcoming_events(self, lookahead_hours: int, calendar_id: str) -> List[CalendarEvent]:
         now = datetime.now(timezone.utc)
         time_max = now + timedelta(hours=lookahead_hours)
 
         events_result = (
             self._service.events()
             .list(
-                calendarId=self._calendar_id,
+                calendarId=calendar_id,
                 timeMin=now.isoformat(),
                 timeMax=time_max.isoformat(),
                 singleEvents=True,

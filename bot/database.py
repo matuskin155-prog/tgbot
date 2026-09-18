@@ -1,6 +1,6 @@
 import sqlite3
 from contextlib import closing
-from typing import List
+from typing import List, Optional
 
 
 class Database:
@@ -31,6 +31,14 @@ class Database:
                     chat_id INTEGER NOT NULL,
                     sent_at TEXT NOT NULL DEFAULT (datetime('now')),
                     PRIMARY KEY (event_id, minutes_before, chat_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
                 )
                 """
             )
@@ -85,4 +93,25 @@ class Database:
             conn.execute(
                 "DELETE FROM sent_reminders WHERE sent_at < datetime('now', ?)",
                 (f"-{older_than_days} days",),
+            )
+
+    def get_setting(self, key: str) -> Optional[str]:
+        with closing(self._connect()) as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                """
+                INSERT INTO settings (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, value),
+            )
+
+    def set_setting_if_absent(self, key: str, value: str) -> None:
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
             )

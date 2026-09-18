@@ -8,38 +8,40 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from .config import Settings
 from .database import Database
 from .google_calendar import CalendarEvent, GoogleCalendarClient
+from .runtime_config import RuntimeConfig
 
 logger = logging.getLogger(__name__)
 
 
 async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Периодическая задача: тянет события из календаря и рассылает напоминания."""
-    settings: Settings = context.bot_data["settings"]
     db: Database = context.bot_data["db"]
     calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
 
     subscribers = db.list_subscribers()
     if not subscribers:
         return
 
     try:
-        events = await asyncio.to_thread(calendar.get_upcoming_events, settings.lookahead_hours)
+        events = await asyncio.to_thread(
+            calendar.get_upcoming_events, runtime.lookahead_hours, runtime.calendar_id
+        )
     except Exception:
         logger.exception("Не удалось получить события из Google Calendar")
         return
 
     now = datetime.now(timezone.utc)
-    tz = ZoneInfo(settings.timezone)
+    tz = ZoneInfo(runtime.timezone)
 
     for event in events:
         minutes_until = (event.start - now).total_seconds() / 60
         if minutes_until <= 0:
             continue
 
-        for minutes_before in settings.reminder_minutes_before:
+        for minutes_before in runtime.reminder_minutes_before:
             if minutes_until > minutes_before:
                 continue
 
