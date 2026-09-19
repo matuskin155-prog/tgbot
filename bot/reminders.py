@@ -9,6 +9,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .database import Database
+from .formatting import format_time_range
 from .google_calendar import CalendarEvent, GoogleCalendarClient
 from .runtime_config import RuntimeConfig
 
@@ -68,10 +69,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _format_reminder(event: CalendarEvent, minutes_before: int, tz: ZoneInfo) -> str:
     when_label = _format_minutes(minutes_before)
-    if event.all_day:
-        event_time = event.start.strftime("%d.%m")
-    else:
-        event_time = event.start.astimezone(tz).strftime("%d.%m в %H:%M")
+    event_time = format_time_range(event, tz)
 
     lines = [
         f"⏰ <b>Напоминание</b> — {when_label}",

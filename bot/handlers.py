@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from .config import Settings
 from .database import Database
+from .formatting import format_time_range
 from .google_calendar import CalendarEvent, GoogleCalendarClient
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
@@ -16,7 +17,8 @@ from .runtime_config import ConfigError, RuntimeConfig
 logger = logging.getLogger(__name__)
 
 WELCOME_TEXT = (
-    "Привет! Я присылаю напоминания о событиях из Google Calendar.\n\n"
+    "Привет! Я присылаю напоминания о событиях из общего Google Calendar — "
+    "подписаться на них может любой, кто напишет мне /subscribe.\n\n"
     "Команды:\n"
     "/subscribe — включить напоминания в этом чате\n"
     "/unsubscribe — выключить напоминания\n"
@@ -122,11 +124,7 @@ async def _send_events(update: Update, context: ContextTypes.DEFAULT_TYPE, hours
 
 
 def _format_event_line(event: CalendarEvent, tz: ZoneInfo) -> str:
-    if event.all_day:
-        when = event.start.strftime("%d.%m")
-    else:
-        when = event.start.astimezone(tz).strftime("%d.%m %H:%M")
-
+    when = format_time_range(event, tz)
     line = f"• {when} — {event.summary}"
     if event.location:
         line += f" ({event.location})"
