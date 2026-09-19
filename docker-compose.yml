@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./service_account.json:/app/service_account.json:ro
+      - ./data:/app/data

@@ -211,6 +211,43 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+## Запуск через Docker (альтернатива venv + systemd)
+
+Не нужно вручную ставить Python/venv на сервере — достаточно Docker.
+
+**1. Установить Docker на сервере** (Ubuntu/Debian):
+
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+**2. Подготовить файлы рядом с `docker-compose.yml`:**
+- `.env` — со всеми переменными (см. `.env.example`); добавьте/поправьте строку
+  ```
+  DATABASE_PATH=/app/data/bot_data.sqlite3
+  ```
+  (это путь внутри контейнера — данные сохранятся в папке `./data` на сервере
+  и переживут пересборку/перезапуск контейнера)
+- `service_account.json` — ключ сервис-аккаунта Google
+
+**3. Собрать и запустить:**
+
+```bash
+docker compose up -d --build
+```
+
+**Полезные команды:**
+
+```bash
+docker compose logs -f      # смотреть логи бота в реальном времени
+docker compose restart      # перезапустить
+docker compose down         # остановить и удалить контейнер (данные в ./data останутся)
+docker compose up -d --build   # пересобрать и перезапустить после обновления кода
+```
+
+Автозапуск при перезагрузке сервера уже встроен (`restart: unless-stopped` в
+`docker-compose.yml`) — отдельный systemd-юнит для этого не нужен.
+
 ## Структура проекта
 
 ```
@@ -227,4 +264,6 @@ bot/
 requirements.txt
 .env.example
 run_bot.bat            # автозапуск бота на Windows (см. «Автозапуск на Windows»)
+Dockerfile               # образ для запуска через Docker
+docker-compose.yml         # см. «Запуск через Docker»
 ```
