@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List
 
 from dotenv import load_dotenv
@@ -27,6 +28,16 @@ def _parse_admin_ids(raw: str) -> List[int]:
     return ids
 
 
+def _parse_digest_time(raw: str) -> str:
+    try:
+        datetime.strptime(raw, "%H:%M")
+    except ValueError as exc:
+        raise ValueError(
+            f"DAILY_DIGEST_TIME должен быть в формате ЧЧ:ММ, получено: {raw!r}"
+        ) from exc
+    return raw
+
+
 @dataclass(frozen=True)
 class Settings:
     telegram_token: str
@@ -38,6 +49,7 @@ class Settings:
     timezone: str
     database_path: str
     admin_chat_ids: List[int]
+    daily_digest_time: str
 
 
 def load_settings() -> Settings:
@@ -57,4 +69,5 @@ def load_settings() -> Settings:
         timezone=os.environ.get("TIMEZONE", "UTC"),
         database_path=os.environ.get("DATABASE_PATH", "bot_data.sqlite3"),
         admin_chat_ids=_parse_admin_ids(os.environ.get("ADMIN_CHAT_IDS", "")),
+        daily_digest_time=_parse_digest_time(os.environ.get("DAILY_DIGEST_TIME", "10:00")),
     )

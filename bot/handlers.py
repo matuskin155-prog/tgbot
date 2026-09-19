@@ -9,8 +9,9 @@ from telegram.ext import ContextTypes
 
 from .config import Settings
 from .database import Database
-from .formatting import format_time_range
-from .google_calendar import CalendarEvent, GoogleCalendarClient
+from .digest import send_daily_digest
+from .formatting import format_event_line
+from .google_calendar import GoogleCalendarClient
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
 
@@ -25,7 +26,9 @@ WELCOME_TEXT = (
     "/today — события на ближайшие 24 часа\n"
     "/upcoming — все события в пределах горизонта просмотра\n"
     "/status — текущие настройки\n"
-    "/whoami — узнать свой chat_id"
+    "/whoami — узнать свой chat_id\n\n"
+    "Каждый день в заданное время я также присылаю сводку событий на сегодня "
+    "всем, кто подписан (/status покажет, во сколько)."
 )
 
 ADMIN_HELP_TEXT = (
@@ -35,7 +38,8 @@ ADMIN_HELP_TEXT = (
     "/set_reminders <60,10> — за сколько минут напоминать\n"
     "/set_lookahead <часы> — горизонт просмотра\n"
     "/set_interval <секунды> — как часто опрашивать календарь\n"
-    "/set_timezone <Europe/Moscow> — часовой пояс"
+    "/set_timezone <Europe/Moscow> — часовой пояс\n"
+    "/set_digest_time <ЧЧ:ММ> — время ежедневной сводки"
 )
 
 
@@ -85,7 +89,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Календарь: {cfg['calendar_id']}\n"
         f"Напоминания за (мин): {cfg['reminder_minutes_before']}\n"
         f"Горизонт просмотра: {cfg['lookahead_hours']} ч.\n"
-        f"Опрос календаря: каждые {cfg['poll_interval_seconds']} сек."
+        f"Опрос календаря: каждые {cfg['poll_interval_seconds']} сек.\n"
+        f"Ежедневная сводка: в {cfg['daily_digest_time']} ({cfg['timezone']})"
     )
     await update.effective_message.reply_text(text)
 
@@ -116,19 +121,11 @@ async def _send_events(update: Update, context: ContextTypes.DEFAULT_TYPE, hours
 
     tz = ZoneInfo(runtime.timezone)
     lines = [f"<b>{title}</b>"]
-    lines.extend(_format_event_line(event, tz) for event in events)
+    lines.extend(format_event_line(event, tz) for event in events)
 
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )
-
-
-def _format_event_line(event: CalendarEvent, tz: ZoneInfo) -> str:
-    when = format_time_range(event, tz)
-    line = f"• {when} — {event.summary}"
-    if event.location:
-        line += f" ({event.location})"
-    return line
 
 
 # --- Команды администратора: настройка бота прямо из Telegram ---
@@ -167,7 +164,8 @@ async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Напоминания за (мин): {cfg['reminder_minutes_before']}\n"
         f"Горизонт просмотра: {cfg['lookahead_hours']} ч.\n"
         f"Опрос календаря: каждые {cfg['poll_interval_seconds']} сек.\n"
-        f"Часовой пояс: {escape(cfg['timezone'])}"
+        f"Часовой пояс: {escape(cfg['timezone'])}\n"
+        f"Ежедневная сводка: в {escape(cfg['daily_digest_time'])}"
         + ADMIN_HELP_TEXT
     )
     await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -256,4 +254,32 @@ async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except ConfigError as exc:
         await update.effective_message.reply_text(str(exc))
         return
+    _reschedule_daily_digest(context, runtime)
     await update.effective_message.reply_text(f"Часовой пояс обновлён: {runtime.timezone}")
+
+
+async def set_digest_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_admin(update, context):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "Использование: /set_digest_time <ЧЧ:ММ>, например: 09:30"
+        )
+        return
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    try:
+        runtime.set_daily_digest_time(context.args[0])
+    except ConfigError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    _reschedule_daily_digest(context, runtime)
+    await update.effective_message.reply_text(
+        f"Время ежедневной сводки обновлено: {runtime.daily_digest_time}"
+    )
+
+
+def _reschedule_daily_digest(context: ContextTypes.DEFAULT_TYPE, runtime: RuntimeConfig) -> None:
+    for job in context.job_queue.get_jobs_by_name("daily_digest"):
+        job.schedule_removal()
+    digest_time = runtime.daily_digest_time_obj.replace(tzinfo=ZoneInfo(runtime.timezone))
+    context.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")

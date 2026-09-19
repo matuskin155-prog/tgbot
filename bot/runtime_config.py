@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, time
 from typing import List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -16,6 +17,7 @@ class Defaults:
     poll_interval_seconds: int
     lookahead_hours: int
     timezone: str
+    daily_digest_time: str
 
 
 class RuntimeConfig:
@@ -40,6 +42,7 @@ class RuntimeConfig:
         )
         self._db.set_setting_if_absent("lookahead_hours", str(defaults.lookahead_hours))
         self._db.set_setting_if_absent("timezone", defaults.timezone)
+        self._db.set_setting_if_absent("daily_digest_time", defaults.daily_digest_time)
 
     @property
     def calendar_id(self) -> str:
@@ -100,6 +103,19 @@ class RuntimeConfig:
             ) from exc
         self._db.set_setting("timezone", value)
 
+    @property
+    def daily_digest_time(self) -> str:
+        return self._db.get_setting("daily_digest_time")
+
+    @property
+    def daily_digest_time_obj(self) -> time:
+        return _parse_digest_time(self.daily_digest_time)
+
+    def set_daily_digest_time(self, raw: str) -> time:
+        parsed = _parse_digest_time(raw)
+        self._db.set_setting("daily_digest_time", parsed.strftime("%H:%M"))
+        return parsed
+
     def as_dict(self) -> dict:
         return {
             "calendar_id": self.calendar_id,
@@ -107,6 +123,7 @@ class RuntimeConfig:
             "poll_interval_seconds": self.poll_interval_seconds,
             "lookahead_hours": self.lookahead_hours,
             "timezone": self.timezone,
+            "daily_digest_time": self.daily_digest_time,
         }
 
 
@@ -129,3 +146,10 @@ def _parse_minutes(raw: str) -> List[int]:
 
 def _format_minutes(minutes: List[int]) -> str:
     return ",".join(str(m) for m in minutes)
+
+
+def _parse_digest_time(raw: str) -> time:
+    try:
+        return datetime.strptime(raw.strip(), "%H:%M").time()
+    except ValueError as exc:
+        raise ConfigError("Время должно быть в формате ЧЧ:ММ, например: 10:00") from exc

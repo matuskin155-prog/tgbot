@@ -1,11 +1,13 @@
 import asyncio
 import logging
+from zoneinfo import ZoneInfo
 
 from telegram.ext import Application, CommandHandler
 
 from . import handlers
 from .config import load_settings
 from .database import Database
+from .digest import send_daily_digest
 from .google_calendar import GoogleCalendarClient
 from .reminders import check_reminders
 from .runtime_config import Defaults, RuntimeConfig
@@ -35,6 +37,7 @@ def main() -> None:
             poll_interval_seconds=settings.poll_interval_seconds,
             lookahead_hours=settings.lookahead_hours,
             timezone=settings.timezone,
+            daily_digest_time=settings.daily_digest_time,
         ),
     )
 
@@ -58,6 +61,7 @@ def main() -> None:
     application.add_handler(CommandHandler("set_lookahead", handlers.set_lookahead))
     application.add_handler(CommandHandler("set_interval", handlers.set_interval))
     application.add_handler(CommandHandler("set_timezone", handlers.set_timezone))
+    application.add_handler(CommandHandler("set_digest_time", handlers.set_digest_time))
 
     application.job_queue.run_repeating(
         check_reminders,
@@ -66,10 +70,17 @@ def main() -> None:
         name="check_reminders",
     )
 
+    digest_time = runtime_config.daily_digest_time_obj.replace(
+        tzinfo=ZoneInfo(runtime_config.timezone)
+    )
+    application.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")
+
     logger.info(
-        "Бот запущен, опрашиваю календарь %s каждые %s сек.",
+        "Бот запущен, опрашиваю календарь %s каждые %s сек., ежедневная сводка в %s (%s).",
         runtime_config.calendar_id,
         runtime_config.poll_interval_seconds,
+        runtime_config.daily_digest_time,
+        runtime_config.timezone,
     )
     application.run_polling(allowed_updates=[])
 

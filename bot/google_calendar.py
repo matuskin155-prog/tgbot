@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -34,12 +35,22 @@ class GoogleCalendarClient:
     def get_upcoming_events(self, lookahead_hours: int, calendar_id: str) -> List[CalendarEvent]:
         now = datetime.now(timezone.utc)
         time_max = now + timedelta(hours=lookahead_hours)
+        return self._list_events(now, time_max, calendar_id)
 
+    def get_events_for_day(self, day: date, calendar_id: str, tz: ZoneInfo) -> List[CalendarEvent]:
+        """Все события за указанный календарный день в часовом поясе tz."""
+        start_of_day = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
+        end_of_day = start_of_day + timedelta(days=1)
+        return self._list_events(start_of_day, end_of_day, calendar_id)
+
+    def _list_events(
+        self, time_min: datetime, time_max: datetime, calendar_id: str
+    ) -> List[CalendarEvent]:
         events_result = (
             self._service.events()
             .list(
                 calendarId=calendar_id,
-                timeMin=now.isoformat(),
+                timeMin=time_min.isoformat(),
                 timeMax=time_max.isoformat(),
                 singleEvents=True,
                 orderBy="startTime",

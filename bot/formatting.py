@@ -11,6 +11,15 @@ def format_time_range(event: CalendarEvent, tz: ZoneInfo) -> str:
     return _format_timed_range(event, tz)
 
 
+def format_event_line(event: CalendarEvent, tz: ZoneInfo) -> str:
+    """Одна строка списка событий: диапазон времени, название, место."""
+    when = format_time_range(event, tz)
+    line = f"• {when} — {event.summary}"
+    if event.location:
+        line += f" ({event.location})"
+    return line
+
+
 def _format_all_day_range(event: CalendarEvent) -> str:
     start_str = event.start.strftime("%d.%m.%Y")
     if event.end is None:
