@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
 @dataclass
@@ -42,6 +42,13 @@ class GoogleCalendarClient:
         start_of_day = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
         end_of_day = start_of_day + timedelta(days=1)
         return self._list_events(start_of_day, end_of_day, calendar_id)
+
+    def get_event(self, event_id: str, calendar_id: str) -> CalendarEvent:
+        item = self._service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        return self._parse_event(item)
+
+    def delete_event(self, event_id: str, calendar_id: str) -> None:
+        self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
 
     def _list_events(
         self, time_min: datetime, time_max: datetime, calendar_id: str

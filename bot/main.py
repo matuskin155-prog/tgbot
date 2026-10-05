@@ -1,14 +1,16 @@
 import asyncio
 import logging
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
 from . import handlers
 from .config import load_settings
 from .database import Database
 from .digest import send_daily_digest
 from .google_calendar import GoogleCalendarClient
+from .olympiad_watch import check_olympiads_job
 from .reminders import check_reminders
 from .runtime_config import Defaults, RuntimeConfig
 
@@ -62,6 +64,14 @@ def main() -> None:
     application.add_handler(CommandHandler("set_interval", handlers.set_interval))
     application.add_handler(CommandHandler("set_timezone", handlers.set_timezone))
     application.add_handler(CommandHandler("set_digest_time", handlers.set_digest_time))
+    application.add_handler(CommandHandler("delete_event", handlers.delete_event_command))
+    application.add_handler(CommandHandler("olympiads", handlers.olympiads_command))
+    application.add_handler(CommandHandler("check_olympiads", handlers.check_olympiads_command))
+    application.add_handler(CallbackQueryHandler(handlers.handle_delete_pick, pattern=r"^delpick:"))
+    application.add_handler(
+        CallbackQueryHandler(handlers.handle_delete_confirm, pattern=r"^delconfirm:")
+    )
+    application.add_handler(CallbackQueryHandler(handlers.handle_delete_cancel, pattern=r"^delcancel$"))
 
     application.job_queue.run_repeating(
         check_reminders,
@@ -74,6 +84,13 @@ def main() -> None:
         tzinfo=ZoneInfo(runtime_config.timezone)
     )
     application.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")
+
+    application.job_queue.run_repeating(
+        check_olympiads_job,
+        interval=timedelta(hours=24),
+        first=60,
+        name="check_olympiads",
+    )
 
     logger.info(
         "Бот запущен, опрашиваю календарь %s каждые %s сек., ежедневная сводка в %s (%s).",

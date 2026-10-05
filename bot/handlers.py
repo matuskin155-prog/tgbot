@@ -3,15 +3,17 @@ import logging
 from html import escape
 from zoneinfo import ZoneInfo
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from .config import Settings
 from .database import Database
 from .digest import send_daily_digest
-from .formatting import format_event_line
+from .formatting import format_event_line, format_time_range
 from .google_calendar import GoogleCalendarClient
+from .olympiad_watch import check_olympiad_sources
+from .olympiads import SOURCES
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
 
@@ -26,7 +28,8 @@ WELCOME_TEXT = (
     "/today — события на ближайшие 24 часа\n"
     "/upcoming — все события в пределах горизонта просмотра\n"
     "/status — текущие настройки\n"
-    "/whoami — узнать свой chat_id\n\n"
+    "/whoami — узнать свой chat_id\n"
+    "/olympiads — список отслеживаемых олимпиад\n\n"
     "Каждый день в заданное время я также присылаю сводку событий на сегодня "
     "всем, кто подписан (/status покажет, во сколько)."
 )
@@ -39,8 +42,13 @@ ADMIN_HELP_TEXT = (
     "/set_lookahead <часы> — горизонт просмотра\n"
     "/set_interval <секунды> — как часто опрашивать календарь\n"
     "/set_timezone <Europe/Moscow> — часовой пояс\n"
-    "/set_digest_time <ЧЧ:ММ> — время ежедневной сводки"
+    "/set_digest_time <ЧЧ:ММ> — время ежедневной сводки\n"
+    "/delete_event — удалить событие из календаря\n"
+    "/check_olympiads — проверить страницы олимпиад прямо сейчас"
 )
+
+DELETE_WINDOW_DAYS = 30
+DELETE_LIST_LIMIT = 30
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -283,3 +291,151 @@ def _reschedule_daily_digest(context: ContextTypes.DEFAULT_TYPE, runtime: Runtim
         job.schedule_removal()
     digest_time = runtime.daily_digest_time_obj.replace(tzinfo=ZoneInfo(runtime.timezone))
     context.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")
+
+
+# --- Удаление события из календаря (с подтверждением через кнопки) ---
+
+
+async def delete_event_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_admin(update, context):
+        return
+
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+
+    try:
+        events = await asyncio.to_thread(
+            calendar.get_upcoming_events, DELETE_WINDOW_DAYS * 24, runtime.calendar_id
+        )
+    except Exception:
+        logger.exception("Не удалось получить события для удаления")
+        await update.effective_message.reply_text("Не получилось получить события из календаря 😕")
+        return
+
+    if not events:
+        await update.effective_message.reply_text(
+            f"Событий в ближайшие {DELETE_WINDOW_DAYS} дней не найдено."
+        )
+        return
+
+    tz = ZoneInfo(runtime.timezone)
+    buttons = []
+    for event in events[:DELETE_LIST_LIMIT]:
+        label = f"{format_time_range(event, tz)} — {event.summary}"
+        if len(label) > 60:
+            label = label[:57] + "..."
+        buttons.append([InlineKeyboardButton(label, callback_data=f"delpick:{event.id}")])
+
+    text = "Выберите событие, которое нужно удалить из календаря:"
+    if len(events) > DELETE_LIST_LIMIT:
+        text += f"\n(показаны первые {DELETE_LIST_LIMIT} из {len(events)})"
+
+    await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def handle_delete_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not await _require_admin(update, context):
+        return
+
+    event_id = query.data.split(":", 1)[1]
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+
+    try:
+        event = await asyncio.to_thread(calendar.get_event, event_id, runtime.calendar_id)
+    except Exception:
+        logger.exception("Не удалось получить событие %s для подтверждения удаления", event_id)
+        await query.edit_message_text("Не получилось найти это событие — возможно, оно уже удалено.")
+        return
+
+    tz = ZoneInfo(runtime.timezone)
+    when = format_time_range(event, tz)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Да, удалить", callback_data=f"delconfirm:{event_id}"),
+                InlineKeyboardButton("❌ Отмена", callback_data="delcancel"),
+            ]
+        ]
+    )
+    await query.edit_message_text(
+        f"Удалить это событие из календаря?\n\n<b>{escape(event.summary)}</b>\n🕒 {when}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
+async def handle_delete_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not await _require_admin(update, context):
+        return
+
+    event_id = query.data.split(":", 1)[1]
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+
+    try:
+        await asyncio.to_thread(calendar.delete_event, event_id, runtime.calendar_id)
+    except Exception:
+        logger.exception("Не удалось удалить событие %s", event_id)
+        await query.edit_message_text(
+            "Не получилось удалить событие 😕\n"
+            "Проверьте, что сервис-аккаунту выдан доступ «Делать изменения в "
+            "мероприятиях» в настройках календаря (см. README)."
+        )
+        return
+
+    await query.edit_message_text("Событие удалено из календаря ✅")
+
+
+async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Отменено, событие не тронуто.")
+
+
+# --- Слежение за страницами олимпиад ---
+
+
+async def olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    db: Database = context.bot_data["db"]
+    lines = ["<b>Отслеживаемые олимпиады:</b>"]
+    for source in SOURCES:
+        state = db.get_olympiad_state(source.key)
+        marker = " 🔔" if state and state[1] else ""
+        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>{marker}')
+    lines.append("\n🔔 — на странице недавно были изменения, стоит проверить вручную.")
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+    )
+
+
+async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_admin(update, context):
+        return
+
+    db: Database = context.bot_data["db"]
+    await update.effective_message.reply_text(
+        f"Проверяю {len(SOURCES)} страниц, это может занять минуту..."
+    )
+
+    try:
+        changed = await check_olympiad_sources(db)
+    except Exception:
+        logger.exception("Не удалось проверить страницы олимпиад")
+        await update.effective_message.reply_text("Не получилось проверить страницы 😕")
+        return
+
+    if not changed:
+        await update.effective_message.reply_text("Изменений с прошлой проверки не найдено.")
+        return
+
+    lines = ["Изменились:"]
+    for source in changed:
+        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
+    )

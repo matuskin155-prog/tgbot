@@ -1,6 +1,6 @@
 import sqlite3
 from contextlib import closing
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 class Database:
@@ -39,6 +39,16 @@ class Database:
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS olympiad_watch (
+                    key TEXT PRIMARY KEY,
+                    content_hash TEXT NOT NULL,
+                    last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    last_changed_at TEXT
                 )
                 """
             )
@@ -115,3 +125,38 @@ class Database:
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
             )
+
+    def get_olympiad_state(self, key: str) -> Optional[Tuple[str, Optional[str]]]:
+        """Возвращает (content_hash, last_changed_at) или None, если ещё не проверялось."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT content_hash, last_changed_at FROM olympiad_watch WHERE key = ?",
+                (key,),
+            ).fetchone()
+            return (row[0], row[1]) if row else None
+
+    def save_olympiad_check(self, key: str, content_hash: str, changed: bool) -> None:
+        with closing(self._connect()) as conn, conn:
+            if changed:
+                conn.execute(
+                    """
+                    INSERT INTO olympiad_watch (key, content_hash, last_checked_at, last_changed_at)
+                    VALUES (?, ?, datetime('now'), datetime('now'))
+                    ON CONFLICT(key) DO UPDATE SET
+                        content_hash = excluded.content_hash,
+                        last_checked_at = excluded.last_checked_at,
+                        last_changed_at = excluded.last_changed_at
+                    """,
+                    (key, content_hash),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO olympiad_watch (key, content_hash, last_checked_at)
+                    VALUES (?, ?, datetime('now'))
+                    ON CONFLICT(key) DO UPDATE SET
+                        content_hash = excluded.content_hash,
+                        last_checked_at = excluded.last_checked_at
+                    """,
+                    (key, content_hash),
+                )
