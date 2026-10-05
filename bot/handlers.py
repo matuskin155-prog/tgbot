@@ -418,12 +418,13 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
         return
 
     db: Database = context.bot_data["db"]
+    settings: Settings = context.bot_data["settings"]
     await update.effective_message.reply_text(
-        f"Проверяю {len(SOURCES)} страниц, это может занять минуту..."
+        f"Проверяю {len(SOURCES)} страниц через браузер, это может занять минуту..."
     )
 
     try:
-        changed = await check_olympiad_sources(db)
+        changed = await check_olympiad_sources(db, settings.browser_executable_path)
     except Exception:
         logger.exception("Не удалось проверить страницы олимпиад")
         await update.effective_message.reply_text("Не получилось проверить страницы 😕")
