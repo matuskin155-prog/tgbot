@@ -167,6 +167,20 @@ body {
 }
 .delete-btn:active { opacity: 0.6; }
 
+.hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hint);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.hide-btn:active { opacity: 0.6; }
+
 /* --- Группировка по дате (Ближайшие) --- */
 .date-heading {
   font-size: 13px;

@@ -30,6 +30,8 @@ BASE_COMMANDS = [
     BotCommand("upcoming", "Ближайшие события"),
     BotCommand("subscribe", "Включить напоминания"),
     BotCommand("unsubscribe", "Выключить напоминания"),
+    BotCommand("hide_event", "Скрыть событие только у себя"),
+    BotCommand("hidden_events", "Вернуть то, что вы скрыли"),
     BotCommand("status", "Текущие настройки и статус подписки"),
     BotCommand("olympiads", "Список отслеживаемых олимпиад"),
     BotCommand("whoami", "Узнать свой chat_id"),
@@ -151,6 +153,8 @@ def main() -> None:
     application.add_handler(CommandHandler("set_timezone", handlers.set_timezone))
     application.add_handler(CommandHandler("set_digest_time", handlers.set_digest_time))
     application.add_handler(CommandHandler("delete_event", handlers.delete_event_command))
+    application.add_handler(CommandHandler("hide_event", handlers.hide_event_command))
+    application.add_handler(CommandHandler("hidden_events", handlers.hidden_events_command))
     application.add_handler(CommandHandler("olympiads", handlers.olympiads_command))
     application.add_handler(CommandHandler("check_olympiads", handlers.check_olympiads_command))
     application.add_handler(CallbackQueryHandler(handlers.handle_delete_pick, pattern=r"^delpick:"))
@@ -158,6 +162,12 @@ def main() -> None:
         CallbackQueryHandler(handlers.handle_delete_confirm, pattern=r"^delconfirm:")
     )
     application.add_handler(CallbackQueryHandler(handlers.handle_delete_cancel, pattern=r"^delcancel$"))
+    application.add_handler(CallbackQueryHandler(handlers.handle_hide_pick, pattern=r"^hidepick:"))
+    application.add_handler(
+        CallbackQueryHandler(handlers.handle_hide_confirm, pattern=r"^hideconfirm:")
+    )
+    application.add_handler(CallbackQueryHandler(handlers.handle_hide_cancel, pattern=r"^hidecancel$"))
+    application.add_handler(CallbackQueryHandler(handlers.handle_unhide, pattern=r"^unhide:"))
 
     application.job_queue.run_repeating(
         check_reminders,

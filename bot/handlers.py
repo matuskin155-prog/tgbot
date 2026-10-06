@@ -28,6 +28,8 @@ WELCOME_TEXT = (
     "/unsubscribe — выключить напоминания\n"
     "/today — события на ближайшие 24 часа\n"
     "/upcoming — все события в пределах горизонта просмотра\n"
+    "/hide_event — скрыть событие только у себя (остальных не затронет)\n"
+    "/hidden_events — вернуть то, что вы скрыли\n"
     "/status — текущие настройки\n"
     "/whoami — узнать свой chat_id\n"
     "/olympiads — список отслеживаемых олимпиад\n\n"
@@ -123,6 +125,7 @@ async def upcoming(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def _send_events(update: Update, context: ContextTypes.DEFAULT_TYPE, hours: int, title: str) -> None:
     calendar: GoogleCalendarClient = context.bot_data["calendar"]
     runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    db: Database = context.bot_data["db"]
 
     try:
         events = await asyncio.to_thread(calendar.get_upcoming_events, hours, runtime.calendar_id)
@@ -130,6 +133,11 @@ async def _send_events(update: Update, context: ContextTypes.DEFAULT_TYPE, hours
         logger.exception("Не удалось получить события для команды %s", title)
         await update.effective_message.reply_text("Не получилось получить события из календаря 😕")
         return
+
+    # Пользователь мог лично скрыть у себя часть событий - ему их не
+    # показываем, остальным подписчикам они видны как обычно.
+    hidden = db.get_hidden_event_ids_for_chat(update.effective_chat.id)
+    events = [e for e in events if e.id not in hidden]
 
     if not events:
         await update.effective_message.reply_text(f"{title}: событий нет.")
@@ -410,6 +418,152 @@ async def handle_delete_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("Отменено, событие не тронуто.")
+
+
+# --- Скрыть событие только у себя (доступно всем, не только админу) ---
+# В отличие от /delete_event, это не трогает сам календарь - остальные
+# подписчики продолжают видеть событие и получать по нему напоминания.
+
+HIDE_WINDOW_DAYS = 30
+HIDE_LIST_LIMIT = 30
+
+
+async def hide_event_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    db: Database = context.bot_data["db"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    chat_id = update.effective_chat.id
+
+    try:
+        events = await asyncio.to_thread(
+            calendar.get_upcoming_events, HIDE_WINDOW_DAYS * 24, runtime.calendar_id
+        )
+    except Exception:
+        logger.exception("Не удалось получить события для скрытия")
+        await update.effective_message.reply_text("Не получилось получить события из календаря 😕")
+        return
+
+    hidden = db.get_hidden_event_ids_for_chat(chat_id)
+    events = [e for e in events if e.id not in hidden]
+    if not events:
+        await update.effective_message.reply_text(
+            f"Событий в ближайшие {HIDE_WINDOW_DAYS} дней не найдено (или все уже скрыты)."
+        )
+        return
+
+    tz = ZoneInfo(runtime.timezone)
+    buttons = []
+    for event in events[:HIDE_LIST_LIMIT]:
+        label = f"{format_time_range(event, tz)} — {event.summary}"
+        if len(label) > 60:
+            label = label[:57] + "..."
+        buttons.append([InlineKeyboardButton(label, callback_data=f"hidepick:{event.id}")])
+
+    text = "Выберите событие, которое нужно скрыть только у себя:"
+    if len(events) > HIDE_LIST_LIMIT:
+        text += f"\n(показаны первые {HIDE_LIST_LIMIT} из {len(events)})"
+
+    await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def handle_hide_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    event_id = query.data.split(":", 1)[1]
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+
+    try:
+        event = await asyncio.to_thread(calendar.get_event, event_id, runtime.calendar_id)
+    except Exception:
+        logger.exception("Не удалось получить событие %s для подтверждения скрытия", event_id)
+        await query.edit_message_text("Не получилось найти это событие — возможно, оно уже удалено.")
+        return
+
+    tz = ZoneInfo(runtime.timezone)
+    when = format_time_range(event, tz)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Да, скрыть у себя", callback_data=f"hideconfirm:{event_id}"),
+                InlineKeyboardButton("❌ Отмена", callback_data="hidecancel"),
+            ]
+        ]
+    )
+    await query.edit_message_text(
+        "Скрыть это событие только у вас? Остальные подписчики продолжат его "
+        f"видеть и получать по нему напоминания.\n\n<b>{escape(event.summary)}</b>\n🕒 {when}",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+
+
+async def handle_hide_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    db: Database = context.bot_data["db"]
+    event_id = query.data.split(":", 1)[1]
+    db.hide_event_for_chat(update.effective_chat.id, event_id)
+    await query.edit_message_text(
+        "Скрыто ✅ Больше не будет показываться у вас и не будет по нему напоминаний.\n"
+        "Вернуть обратно можно командой /hidden_events"
+    )
+
+
+async def handle_hide_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Отменено, событие не тронуто.")
+
+
+async def hidden_events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Список событий, скрытых лично этим пользователем, с кнопками вернуть."""
+    db: Database = context.bot_data["db"]
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    chat_id = update.effective_chat.id
+
+    hidden_ids = db.get_hidden_event_ids_for_chat(chat_id)
+    if not hidden_ids:
+        await update.effective_message.reply_text("У вас нет скрытых событий.")
+        return
+
+    tz = ZoneInfo(runtime.timezone)
+    buttons = []
+    missing = 0
+    for event_id in sorted(hidden_ids):
+        try:
+            event = await asyncio.to_thread(calendar.get_event, event_id, runtime.calendar_id)
+        except Exception:
+            # Событие могли удалить из календаря целиком - смысла держать
+            # его "скрытым" больше нет, просто убираем запись.
+            db.unhide_event_for_chat(chat_id, event_id)
+            missing += 1
+            continue
+        label = f"{format_time_range(event, tz)} — {event.summary}"
+        if len(label) > 60:
+            label = label[:57] + "..."
+        buttons.append([InlineKeyboardButton(f"↩️ {label}", callback_data=f"unhide:{event_id}")])
+
+    if not buttons:
+        await update.effective_message.reply_text("У вас нет скрытых событий.")
+        return
+
+    text = "Ваши скрытые события — нажмите, чтобы вернуть:"
+    if missing:
+        text += f"\n({missing} уже не существует в календаре, убраны из списка)"
+    await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def handle_unhide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    db: Database = context.bot_data["db"]
+    event_id = query.data.split(":", 1)[1]
+    db.unhide_event_for_chat(update.effective_chat.id, event_id)
+    await query.edit_message_text("Возвращено — снова будет показываться и напоминать.")
 
 
 # --- Слежение за страницами олимпиад ---

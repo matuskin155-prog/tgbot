@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from aiohttp import web
@@ -70,11 +71,19 @@ async def handle_unsubscribe(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-async def _events_payload(request: web.Request, hours: int) -> list:
+async def _events_payload(
+    request: web.Request, hours: int, *, exclude_hidden_for: Optional[int] = None
+) -> list:
     calendar: GoogleCalendarClient = request.app["calendar"]
     runtime: RuntimeConfig = request.app["runtime_config"]
     events = await asyncio.to_thread(calendar.get_upcoming_events, hours, runtime.calendar_id)
     tz = ZoneInfo(runtime.timezone)
+
+    if exclude_hidden_for is not None:
+        db: Database = request.app["db"]
+        hidden = db.get_hidden_event_ids_for_chat(exclude_hidden_for)
+        events = [e for e in events if e.id not in hidden]
+
     return [
         {
             "id": event.id,
@@ -92,9 +101,9 @@ async def _events_payload(request: web.Request, hours: int) -> list:
 
 
 async def handle_events_today(request: web.Request) -> web.Response:
-    _require_auth(request)
+    auth = _require_auth(request)
     try:
-        events = await _events_payload(request, 24)
+        events = await _events_payload(request, 24, exclude_hidden_for=auth["chat_id"])
     except Exception:
         logger.exception("Не удалось получить события на сегодня")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
@@ -102,10 +111,12 @@ async def handle_events_today(request: web.Request) -> web.Response:
 
 
 async def handle_events_upcoming(request: web.Request) -> web.Response:
-    _require_auth(request)
+    auth = _require_auth(request)
     runtime: RuntimeConfig = request.app["runtime_config"]
     try:
-        events = await _events_payload(request, runtime.lookahead_hours)
+        events = await _events_payload(
+            request, runtime.lookahead_hours, exclude_hidden_for=auth["chat_id"]
+        )
     except Exception:
         logger.exception("Не удалось получить ближайшие события")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
@@ -115,6 +126,10 @@ async def handle_events_upcoming(request: web.Request) -> web.Response:
 async def handle_events_deletable(request: web.Request) -> web.Response:
     auth = _require_auth(request)
     _require_admin(auth)
+    # Без exclude_hidden_for - админ должен видеть вообще все события,
+    # включая те, что кто-то скрыл лично у себя, иначе не сможет ими
+    # управлять (скрытие - личная настройка показа, не влияет на то, что
+    # есть в самом календаре).
     try:
         events = await _events_payload(request, DELETE_WINDOW_DAYS * 24)
     except Exception:
@@ -144,6 +159,62 @@ async def handle_events_delete(request: web.Request) -> web.Response:
         ) from exc
 
     return web.json_response({"ok": True})
+
+
+async def handle_events_hide(request: web.Request) -> web.Response:
+    # Доступно любому подписчику, не только админу - прячет событие только
+    # у него самого (сам календарь не трогается, остальные подписчики
+    # продолжают видеть событие и получать по нему напоминания).
+    auth = _require_auth(request)
+    try:
+        body = await request.json()
+        event_id = body["event_id"]
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
+
+    db: Database = request.app["db"]
+    db.hide_event_for_chat(auth["chat_id"], event_id)
+    return web.json_response({"ok": True})
+
+
+async def handle_events_unhide(request: web.Request) -> web.Response:
+    auth = _require_auth(request)
+    try:
+        body = await request.json()
+        event_id = body["event_id"]
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
+
+    db: Database = request.app["db"]
+    db.unhide_event_for_chat(auth["chat_id"], event_id)
+    return web.json_response({"ok": True})
+
+
+async def handle_hidden_events(request: web.Request) -> web.Response:
+    auth = _require_auth(request)
+    db: Database = request.app["db"]
+    calendar: GoogleCalendarClient = request.app["calendar"]
+    runtime: RuntimeConfig = request.app["runtime_config"]
+    tz = ZoneInfo(runtime.timezone)
+
+    hidden_ids = db.get_hidden_event_ids_for_chat(auth["chat_id"])
+    result = []
+    for event_id in sorted(hidden_ids):
+        try:
+            event = await asyncio.to_thread(calendar.get_event, event_id, runtime.calendar_id)
+        except Exception:
+            # Событие удалено из календаря целиком - смысла держать его
+            # "скрытым" больше нет.
+            db.unhide_event_for_chat(auth["chat_id"], event_id)
+            continue
+        result.append(
+            {
+                "id": event.id,
+                "summary": event.summary,
+                "when": format_time_range(event, tz),
+            }
+        )
+    return web.json_response(result)
 
 
 async def handle_olympiads(request: web.Request) -> web.Response:
@@ -260,6 +331,9 @@ def create_app() -> web.Application:
     app.router.add_get("/api/events/upcoming", handle_events_upcoming)
     app.router.add_get("/api/events/deletable", handle_events_deletable)
     app.router.add_post("/api/events/delete", handle_events_delete)
+    app.router.add_post("/api/events/hide", handle_events_hide)
+    app.router.add_post("/api/events/unhide", handle_events_unhide)
+    app.router.add_get("/api/hidden_events", handle_hidden_events)
     app.router.add_get("/api/olympiads", handle_olympiads)
     app.router.add_post("/api/olympiads/check", handle_olympiads_check)
     app.router.add_post("/api/config", handle_config_update)

@@ -69,24 +69,29 @@ function dateHeading(isoDate) {
   return `${WEEKDAYS[d.getDay()].replace(/^./, (c) => c.toUpperCase())}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-function eventCard(e, { tappable = false, index = 0, showDelete = false } = {}) {
+function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
   const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
   const countdownBadge = countdown
     ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
     : "";
-  // "Открыть в Google Calendar" и кнопку удаления не показываем на
-  // карточках для удаления - там сама карточка целиком уже кликабельна
-  // для другого действия, вложенные кнопки внутри неё только путали бы.
+  // Эти кнопки не показываем на карточках для удаления - там сама карточка
+  // целиком уже кликабельна для другого действия, вложенные кнопки внутри
+  // неё только путали бы.
   const calLink = !tappable && e.html_link
     ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Открыть в Google Calendar</button>`
     : "";
   const deleteBtn = !tappable && showDelete
     ? `<button class="delete-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🗑 Удалить</button>`
     : "";
-  const actionsRow = calLink || deleteBtn
-    ? `<div class="row-actions">${calLink}${deleteBtn}</div>`
+  // "Скрыть у себя" доступно ЛЮБОМУ подписчику (не только админу) - событие
+  // в общем календаре не трогает, просто больше не показывается именно ему.
+  const hideBtn = !tappable && showHide
+    ? `<button class="hide-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🙈 Скрыть у себя</button>`
+    : "";
+  const actionsRow = calLink || deleteBtn || hideBtn
+    ? `<div class="row-actions">${calLink}${hideBtn}${deleteBtn}</div>`
     : "";
   return `
     <div class="card ${liveClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
@@ -106,12 +111,12 @@ function emptyState(emoji, text) {
   return `<div class="empty"><span class="emoji">${emoji}</span>${text}</div>`;
 }
 
-function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false, showDelete = false } = {}) {
+function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false, showDelete = false, showHide = false } = {}) {
   if (!events.length) return emptyState(emptyEmoji, emptyText);
-  return events.map((e, i) => eventCard(e, { tappable, index: i, showDelete })).join("");
+  return events.map((e, i) => eventCard(e, { tappable, index: i, showDelete, showHide })).join("");
 }
 
-function renderGroupedByDate(events, { showDelete = false } = {}) {
+function renderGroupedByDate(events, { showDelete = false, showHide = false } = {}) {
   if (!events.length) return emptyState("🎉", "Событий нет");
   let html = "";
   let lastDate = null;
@@ -120,15 +125,30 @@ function renderGroupedByDate(events, { showDelete = false } = {}) {
       html += `<div class="date-heading">${dateHeading(e.date)}</div>`;
       lastDate = e.date;
     }
-    html += eventCard(e, { index: i, showDelete });
+    html += eventCard(e, { index: i, showDelete, showHide });
   });
   return html;
 }
 
-// Вешает обработчики на кнопки "открыть в Google Calendar" и "удалить",
-// добавленные в eventCard() - вызывать после каждой вставки
+function confirmHide(eventId, summary, onDone) {
+  tg.showConfirm(`Скрыть «${summary}» только у себя? Остальные подписчики продолжат его видеть и получать напоминания.`, async (confirmed) => {
+    if (!confirmed) return;
+    try {
+      await api("/api/events/hide", { method: "POST", body: JSON.stringify({ event_id: eventId }) });
+      hapticNotify("success");
+      tg.showAlert("Скрыто. Вернуть можно в разделе «Ещё».");
+    } catch (e) {
+      hapticNotify("error");
+      tg.showAlert("Ошибка: " + e.message);
+    }
+    if (onDone) onDone();
+  });
+}
+
+// Вешает обработчики на кнопки "открыть в Google Calendar", "скрыть" и
+// "удалить", добавленные в eventCard() - вызывать после каждой вставки
 // renderEventList()/renderGroupedByDate() в DOM.
-function bindCardActions(onDeleted) {
+function bindCardActions(onChanged) {
   content.querySelectorAll(".cal-link").forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation();
@@ -140,7 +160,14 @@ function bindCardActions(onDeleted) {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       haptic("light");
-      confirmDelete(btn.dataset.id, btn.dataset.summary, onDeleted);
+      confirmDelete(btn.dataset.id, btn.dataset.summary, onChanged);
+    };
+  });
+  content.querySelectorAll(".hide-btn").forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      haptic("light");
+      confirmHide(btn.dataset.id, btn.dataset.summary, onChanged);
     };
   });
 }
@@ -177,7 +204,7 @@ async function showToday() {
     const events = await api("/api/events/today");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
     content.innerHTML = subBtn + renderEventList(events, {
-      emptyEmoji: "🎉", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin,
+      emptyEmoji: "🎉", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin, showHide: true,
     });
     bindCardActions(showToday);
   } catch (e) {
@@ -207,7 +234,7 @@ async function showUpcoming() {
   try {
     const events = await api("/api/events/upcoming");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
-    content.innerHTML = renderGroupedByDate(events, { showDelete: STATE.is_admin });
+    content.innerHTML = renderGroupedByDate(events, { showDelete: STATE.is_admin, showHide: true });
     bindCardActions(showUpcoming);
   } catch (e) {
     content.innerHTML = emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
@@ -271,8 +298,10 @@ async function showSettings() {
         <div class="title">Ваш chat_id: ${STATE.chat_id}</div>
         <div class="loc">Напоминания: ${STATE.is_subscribed ? "включены 🔔" : "выключены 🔕"}</div>
       </div>
-      ${emptyState("🔒", "Настройки бота доступны только администратору.")}
+      <button class="btn secondary" id="open-hidden">🙈 Скрытые события</button>
+      ${emptyState("🔒", "Остальные настройки бота доступны только администратору.")}
     `;
+    document.getElementById("open-hidden").onclick = () => { haptic("light"); showHiddenPicker(); };
     return;
   }
 
@@ -299,6 +328,7 @@ async function showSettings() {
     </div>
 
     <button class="btn" id="save-settings">💾 Сохранить</button>
+    <button class="btn secondary" id="open-hidden">🙈 Скрытые события</button>
     <button class="btn danger" id="open-delete">🗑 Удалить событие из календаря</button>
   `;
 
@@ -329,7 +359,50 @@ async function showSettings() {
     }
   };
 
+  document.getElementById("open-hidden").onclick = () => { haptic("light"); showHiddenPicker(); };
   document.getElementById("open-delete").onclick = () => { haptic("light"); showDeletePicker(); };
+}
+
+async function showHiddenPicker() {
+  titleEl.textContent = "Скрытые события";
+  setSubtitle("Видны только вам");
+  content.innerHTML = skeleton(2);
+  let events;
+  try {
+    events = await api("/api/hidden_events");
+  } catch (e) {
+    content.innerHTML = emptyState("⚠️", "Ошибка: " + escapeHtml(e.message)) + backButton();
+    bindBack();
+    return;
+  }
+
+  if (!events.length) {
+    content.innerHTML = emptyState("🙈", "У вас нет скрытых событий") + backButton();
+  } else {
+    content.innerHTML = events.map((e, i) => `
+      <div class="card" style="--i:${i}">
+        <div class="row-top"><span class="time">${escapeHtml(e.when)}</span></div>
+        <div class="title">${escapeHtml(e.summary)}</div>
+        <div class="row-actions">
+          <button class="cal-link" data-id="${escapeHtml(e.id)}">↩️ Вернуть</button>
+        </div>
+      </div>
+    `).join("") + backButton();
+    content.querySelectorAll(".cal-link").forEach((btn) => {
+      btn.onclick = async () => {
+        haptic("light");
+        try {
+          await api("/api/events/unhide", { method: "POST", body: JSON.stringify({ event_id: btn.dataset.id }) });
+          hapticNotify("success");
+        } catch (e) {
+          hapticNotify("error");
+          tg.showAlert("Ошибка: " + e.message);
+        }
+        showHiddenPicker();
+      };
+    });
+  }
+  bindBack();
 }
 
 async function showDeletePicker() {

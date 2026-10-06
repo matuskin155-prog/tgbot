@@ -26,6 +26,10 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
     if not subscribers:
         return
 
+    # Подписчик мог лично скрыть у себя какое-то событие (не трогая сам
+    # календарь) - такому chat_id напоминания по нему больше не шлём.
+    hidden_by_chat = {chat_id: db.get_hidden_event_ids_for_chat(chat_id) for chat_id in subscribers}
+
     try:
         events = await asyncio.to_thread(
             calendar.get_upcoming_events, runtime.lookahead_hours, runtime.calendar_id
@@ -47,6 +51,8 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
                 continue
 
             for chat_id in subscribers:
+                if event.id in hidden_by_chat[chat_id]:
+                    continue
                 if db.has_sent_reminder(event.id, minutes_before, chat_id):
                     continue
 

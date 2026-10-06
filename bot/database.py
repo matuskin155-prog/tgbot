@@ -1,6 +1,6 @@
 import sqlite3
 from contextlib import closing
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 
 class Database:
@@ -53,6 +53,16 @@ class Database:
                     content_hash TEXT NOT NULL,
                     last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
                     last_changed_at TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hidden_events (
+                    chat_id INTEGER NOT NULL,
+                    event_id TEXT NOT NULL,
+                    hidden_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    PRIMARY KEY (chat_id, event_id)
                 )
                 """
             )
@@ -212,3 +222,36 @@ class Database:
                 (source_key, today_iso),
             ).fetchone()
             return row is not None
+
+    def hide_event_for_chat(self, chat_id: int, event_id: str) -> None:
+        """Скрывает событие только для этого chat_id - само событие в
+        Google Calendar не трогается, остальные подписчики видят его как
+        прежде и продолжают получать по нему напоминания."""
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO hidden_events (chat_id, event_id) VALUES (?, ?)",
+                (chat_id, event_id),
+            )
+
+    def unhide_event_for_chat(self, chat_id: int, event_id: str) -> bool:
+        with closing(self._connect()) as conn, conn:
+            cur = conn.execute(
+                "DELETE FROM hidden_events WHERE chat_id = ? AND event_id = ?",
+                (chat_id, event_id),
+            )
+            return cur.rowcount > 0
+
+    def is_event_hidden_for_chat(self, chat_id: int, event_id: str) -> bool:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM hidden_events WHERE chat_id = ? AND event_id = ?",
+                (chat_id, event_id),
+            ).fetchone()
+            return row is not None
+
+    def get_hidden_event_ids_for_chat(self, chat_id: int) -> Set[str]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT event_id FROM hidden_events WHERE chat_id = ?", (chat_id,)
+            ).fetchall()
+            return {row[0] for row in rows}

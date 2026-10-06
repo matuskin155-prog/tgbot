@@ -36,9 +36,12 @@ async def send_daily_digest(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("Не удалось получить события для ежедневной сводки")
         return
 
-    text = _format_digest(events, tz)
-
     for chat_id in subscribers:
+        # Каждый подписчик мог лично скрыть у себя часть событий - сводка
+        # собирается персонально, чтобы их не показывать именно ему.
+        hidden = db.get_hidden_event_ids_for_chat(chat_id)
+        visible_events = [e for e in events if e.id not in hidden]
+        text = _format_digest(visible_events, tz)
         try:
             await context.bot.send_message(
                 chat_id=chat_id,
