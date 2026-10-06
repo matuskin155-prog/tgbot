@@ -144,6 +144,22 @@ def _check_all_sync(
     changed: List[OlympiadSource] = []
     added_events: List[AddedOlympiadEvent] = []
 
+    # Если для олимпиады уже заведено в календарь будущее событие - значит,
+    # актуальная дата уже известна, пересматривать страницу незачем (пока
+    # эта дата не пройдёт). Экономит время проверки и не дёргает лишний раз
+    # сайты олимпиад.
+    today_iso = date.today().isoformat()
+    sources_to_check = [
+        s for s in SOURCES if not db.has_upcoming_olympiad_event(s.key, today_iso)
+    ]
+    if len(sources_to_check) < len(SOURCES):
+        logger.info(
+            "Пропускаю %s олимпиад(ы) - для них уже есть будущие даты в календаре",
+            len(SOURCES) - len(sources_to_check),
+        )
+    if not sources_to_check:
+        return _CheckResult(changed, added_events)
+
     try:
         driver = _build_driver(browser_executable_path)
     except WebDriverException:
@@ -154,7 +170,7 @@ def _check_all_sync(
         return _CheckResult(changed, added_events)
 
     try:
-        for source in SOURCES:
+        for source in sources_to_check:
             text = _fetch_rendered_text(driver, source.url)
             if text is None:
                 continue

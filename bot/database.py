@@ -201,3 +201,14 @@ class Database:
                 """,
                 (event_id, source_key, start_date, end_date),
             )
+
+    def has_upcoming_olympiad_event(self, source_key: str, today_iso: str) -> bool:
+        """Есть ли у этого источника хотя бы одно уже заведённое в календарь
+        событие, которое ещё не закончилось - если да, страницу пересматривать
+        рано, мы уже знаем актуальную дату."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM olympiad_events WHERE source_key = ? AND end_date > ? LIMIT 1",
+                (source_key, today_iso),
+            ).fetchone()
+            return row is not None
