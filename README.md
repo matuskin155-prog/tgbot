@@ -255,35 +255,34 @@ Chrome/Chromium (Selenium) — то есть видит страницу так 
 
 ### Настройка браузера для слежения за олимпиадами
 
-Нужен установленный Chrome/Chromium на сервере (Selenium сам его не ставит).
+Нужен установленный браузер на сервере (Selenium сам его не ставит).
 
-**Если браузер уже установлен на сервере** (venv-вариант, не Docker) —
-узнайте путь к нему и впишите в `.env`:
+**`deploy.sh` и `deploy_from_pc.bat` ставят браузер автоматически** —
+Google Chrome через официальный `.deb`, и сами прописывают
+`BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome` в `.env`. Это сделано не
+через стандартный пакет `chromium`, потому что **на Ubuntu этот пакет —
+пересадочная заглушка на snap**, и без рабочего snapd (обычная ситуация на
+VPS) браузер по факту не ставится, хотя apt отчитывается об успехе. Google
+Chrome `.deb` работает одинаково надёжно на Debian и Ubuntu.
 
-```bash
-which chromium || which chromium-browser || which google-chrome
-```
-
-```
-BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
-```
-
-Driver (chromedriver) Selenium 4.6+ подбирает и скачивает автоматически под
-версию вашего браузера (один раз, при первой проверке) — отдельно ставить
-его не нужно.
-
-**Если браузера нет** — поставьте Chromium с драйвером одной командой
-(Ubuntu/Debian):
+**Если настраивали руками** (Вариант В) — то же самое вручную:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y chromium chromium-driver
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install -y ./google-chrome-stable_current_amd64.deb
+```
+```
+BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome
 ```
 
-и укажите `BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` в `.env`.
+Chromedriver отдельно ставить не нужно — Selenium 4.6+ сам подбирает и
+скачивает подходящий драйвер под версию браузера при первой проверке.
 
 **В Docker** браузер ставится внутрь образа автоматически (см.
-`Dockerfile`) — ничего дополнительно настраивать не нужно, но это
-увеличивает размер образа (см. «Сколько места занимает бот» ниже).
+`Dockerfile`) — там используется пакет `chromium` из Debian (не Ubuntu),
+где он настоящий, а не snap-заглушка, так что проблема выше его не
+касается. Ничего дополнительно настраивать не нужно, но это увеличивает
+размер образа (см. «Сколько места занимает бот» ниже).
 
 ## Конфигурация (`.env`)
 
@@ -406,7 +405,7 @@ docker compose up -d --build   # пересобрать и перезапуст�
 | — из них `google-api-python-client` | 109 МБ (тащит discovery-документы вообще всех Google API, не только Calendar) |
 | — из них `selenium` | 36 МБ |
 | База данных SQLite | сотни КБ — несколько МБ (старые записи чистятся автоматически) |
-| Chromium + chromium-driver (apt, если браузера ещё нет) | ориентировочно 250–350 МБ (по открытым данным о размере пакета — не ставил в этой среде, тут заблокирована загрузка) |
+| Google Chrome (.deb, если браузера ещё нет; ставят `deploy.sh`/`deploy_from_pc.bat`) | ориентировочно 250–300 МБ (по открытым данным — не ставил в этой среде, тут заблокирована загрузка) |
 
 **Итого:** если браузер на сервере уже есть и просто указан через
 `BROWSER_EXECUTABLE_PATH` — около **200 МБ**. Если браузер нужно ставить
