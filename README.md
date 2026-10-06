@@ -70,9 +70,26 @@ Telegram-бот, который периодически опрашивает Go
 
 ## 3. Настроить и запустить бота
 
+### Вариант А — одним скриптом на Debian/Ubuntu-сервере
+
+```bash
+git clone -b claude/telegram-google-calendar-reminders-nna72g https://github.com/matuskin155-prog/tgbot.git
+cd tgbot
+sudo bash deploy.sh
+```
+
+Скрипт сам поставит Python/venv/Chromium, зависимости и настроит автозапуск
+через systemd. При первом запуске он создаст `.env` и остановится — впишите
+туда `TELEGRAM_BOT_TOKEN`, положите рядом `service_account.json` и запустите
+`sudo bash deploy.sh` ещё раз (повторные запуски безопасны — ничего не
+перезатирают). Дальше бот уже работает как systemd-сервис, отдельно
+запускать `python -m bot.main` не нужно.
+
+### Вариант Б — руками (любая ОС, в том числе Windows)
+
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
@@ -284,6 +301,10 @@ sudo apt-get update && sudo apt-get install -y chromium chromium-driver
 
 ## Запуск как systemd-сервиса на Linux/сервере (пример)
 
+Если разворачивали через `deploy.sh` (Вариант А выше) — этот юнит уже создан
+и запущен автоматически, этот раздел можно не делать. Пригодится, если
+настраивали руками (Вариант Б).
+
 ```ini
 [Unit]
 Description=Telegram Google Calendar reminder bot
@@ -378,6 +399,7 @@ bot/
 requirements.txt
 .env.example
 run_bot.bat            # автозапуск бота на Windows (см. «Автозапуск на Windows»)
-Dockerfile               # образ для запуска через Docker
-docker-compose.yml         # см. «Запуск через Docker»
+deploy.sh                # разворачивает бота на Debian/Ubuntu-сервере одной командой
+Dockerfile                 # образ для запуска через Docker
+docker-compose.yml           # см. «Запуск через Docker»
 ```
