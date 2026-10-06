@@ -27,7 +27,10 @@ fi
 PROXY_PORT="${WARP_PROXY_PORT:-40000}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
-PROXY_URL="socks5://127.0.0.1:${PROXY_PORT}"
+# socks5h (а не socks5) — чтобы DNS-запрос к api.telegram.org тоже шёл через
+# WARP, а не через DNS самого сервера (он тоже может быть подделан/заблокирован
+# у провайдера отдельно от самого соединения — обычный приём блокировок).
+PROXY_URL="socks5h://127.0.0.1:${PROXY_PORT}"
 
 try_warp() {
     echo "    > warp-cli $*"
