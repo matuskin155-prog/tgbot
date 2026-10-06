@@ -1,27 +1,32 @@
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 rem ============================================================
-rem  Разворачивает/обновляет бота на сервере одним запуском —
-rem  с ВАШЕГО компьютера, без ручного захода по SSH.
+rem  Deploys/updates the bot on your server from this computer,
+rem  without manually opening an SSH console.
 rem
-rem  Что делает:
-rem   1) по SSH клонирует код на сервере (или обновляет, если
-rem      уже клонирован);
-rem   2) при первом запуске загружает .env и service_account.json
-rem      с этого компьютера на сервер (если на сервере их ещё нет —
-rem      если уже есть, не трогает, чтобы не затереть то, что вы
-rem      правили прямо на сервере, например ADMIN_CHAT_IDS);
-rem   3) запускает deploy.sh на сервере (ставит зависимости,
-rem      поднимает systemd-автозапуск).
+rem  What it does:
+rem   1) clones the code on the server over SSH (or pulls, if
+rem      already cloned);
+rem   2) on first run, uploads .env and service_account.json from
+rem      this computer to the server (only if the server doesn't
+rem      already have them, so edits made directly on the server,
+rem      e.g. ADMIN_CHAT_IDS, are never overwritten);
+rem   3) runs deploy.sh on the server (installs dependencies,
+rem      sets up the systemd autostart service).
 rem
-rem  IP сервера спросит один раз и запомнит в server.ini —
-rem  этот файл не попадёт в GitHub (см. .gitignore).
+rem  The server IP is asked once and cached in server.ini, which
+rem  never reaches GitHub (see .gitignore).
 rem
-rem  Нужен ssh/scp — они есть по умолчанию в Windows 10/11.
-rem  Чтобы не вводить пароль на каждом шаге, один раз настройте
-rem  вход по ключу (см. README.md, раздел про deploy_from_pc.bat).
+rem  Requires ssh/scp - both ship with Windows 10/11 by default.
+rem  To avoid typing your password at every step, set up SSH key
+rem  login once (see README.md, the deploy_from_pc.bat section).
+rem
+rem  NOTE: this file is kept pure ASCII on purpose. Cyrillic text
+rem  inside a .bat file can break cmd.exe's parser depending on
+rem  the active code page, causing commands like git/ssh to fail
+rem  with "is not recognized" even though they are installed.
+rem  All explanations in Russian live in README.md instead.
 rem ============================================================
 
 set SERVER_USER=root
@@ -36,54 +41,54 @@ if exist server.ini (
 )
 
 if not defined SERVER_IP (
-    set /p SERVER_IP="IP сервера: "
+    set /p SERVER_IP="Server IP: "
     echo SERVER_IP=%SERVER_IP%> server.ini
 )
 
 echo.
-echo === Подключаюсь к %SERVER_IP%, клонирую/обновляю код ===
+echo === Connecting to %SERVER_IP%, cloning/updating code ===
 ssh %SERVER_USER%@%SERVER_IP% "mkdir -p ~/%REMOTE_DIR% && cd ~/%REMOTE_DIR% && (git rev-parse --git-dir >/dev/null 2>&1 && git pull || git clone -b %BRANCH% %REPO_URL% .)"
 if errorlevel 1 (
     echo.
-    echo Не получилось подключиться или обновить код. Проверьте IP и доступ по SSH.
+    echo Could not connect or update the code. Check the IP and SSH access.
     pause
     exit /b 1
 )
 
 echo.
-echo === Проверяю .env на сервере ===
+echo === Checking .env on the server ===
 ssh %SERVER_USER%@%SERVER_IP% "test -f ~/%REMOTE_DIR%/.env"
 if errorlevel 1 (
     if exist .env (
-        echo .env на сервере не найден — загружаю локальный .env
+        echo .env not found on server - uploading local .env
         scp .env %SERVER_USER%@%SERVER_IP%:~/%REMOTE_DIR%/.env
     ) else (
-        echo На сервере нет .env, и локального .env рядом с этим bat-файлом тоже нет.
-        echo Скопируйте .env.example в .env, заполните TELEGRAM_BOT_TOKEN и запустите снова.
+        echo No .env on the server, and no local .env next to this bat file either.
+        echo Copy .env.example to .env, fill in TELEGRAM_BOT_TOKEN, then run this again.
     )
 ) else (
-    echo .env на сервере уже есть — не трогаю его.
+    echo .env already exists on the server - leaving it alone.
 )
 
 echo.
-echo === Проверяю service_account.json на сервере ===
+echo === Checking service_account.json on the server ===
 ssh %SERVER_USER%@%SERVER_IP% "test -f ~/%REMOTE_DIR%/service_account.json"
 if errorlevel 1 (
     if exist service_account.json (
-        echo service_account.json на сервере не найден — загружаю локальный файл
+        echo service_account.json not found on server - uploading local file
         scp service_account.json %SERVER_USER%@%SERVER_IP%:~/%REMOTE_DIR%/service_account.json
     ) else (
-        echo На сервере нет service_account.json, и локального рядом тоже нет.
-        echo Положите его рядом с этим bat-файлом и запустите снова.
+        echo No service_account.json on the server, and no local copy here either.
+        echo Put it next to this bat file and run this again.
     )
 ) else (
-    echo service_account.json на сервере уже есть — не трогаю его.
+    echo service_account.json already exists on the server - leaving it alone.
 )
 
 echo.
-echo === Запускаю deploy.sh на сервере ===
+echo === Running deploy.sh on the server ===
 ssh %SERVER_USER%@%SERVER_IP% "cd ~/%REMOTE_DIR% && sudo bash deploy.sh"
 
 echo.
-echo Готово. Посмотреть логи: ssh %SERVER_USER%@%SERVER_IP% "journalctl -u tgbot -f"
+echo Done. View logs with: ssh %SERVER_USER%@%SERVER_IP% "journalctl -u tgbot -f"
 pause
