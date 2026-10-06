@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
@@ -57,6 +58,38 @@ class GoogleCalendarClient:
     def delete_event(self, event_id: str, calendar_id: str) -> None:
         with self._lock:
             self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+
+    def upsert_event(
+        self,
+        event_id: str,
+        calendar_id: str,
+        summary: str,
+        description: str,
+        start_date: date,
+        end_date: date,
+    ) -> None:
+        """Создаёт all-day событие с заданным id, либо обновляет его, если
+        событие с таким id уже есть (используется для автодобавления
+        олимпиад — event_id стабилен между проверками, повторный вызов
+        с тем же id не создаёт дубликат, а актуализирует даты/описание)."""
+        body = {
+            "summary": summary,
+            "description": description,
+            "start": {"date": start_date.isoformat()},
+            "end": {"date": end_date.isoformat()},
+        }
+        with self._lock:
+            try:
+                self._service.events().insert(
+                    calendarId=calendar_id, body={**body, "id": event_id}
+                ).execute()
+            except HttpError as exc:
+                if exc.resp.status == 409:
+                    self._service.events().update(
+                        calendarId=calendar_id, eventId=event_id, body=body
+                    ).execute()
+                else:
+                    raise
 
     def _list_events(
         self, time_min: datetime, time_max: datetime, calendar_id: str

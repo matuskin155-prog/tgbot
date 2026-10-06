@@ -106,9 +106,14 @@ async function showOlympiads() {
       ev.target.disabled = true;
       try {
         const res = await api("/api/olympiads/check", { method: "POST" });
-        tg.showAlert(res.changed.length
-          ? "Изменились: " + res.changed.map((c) => c.name).join(", ")
-          : "Изменений не найдено");
+        const parts = [];
+        if (res.added_events.length) {
+          parts.push("В календарь добавлено/обновлено: " + res.added_events.map((e) => `${e.name} (${e.start_date})`).join(", "));
+        }
+        if (res.changed.length) {
+          parts.push("Изменились страницы: " + res.changed.map((c) => c.name).join(", "));
+        }
+        tg.showAlert(parts.length ? parts.join("\n") : "Изменений не найдено");
       } catch (e) {
         tg.showAlert("Ошибка: " + e.message);
       }

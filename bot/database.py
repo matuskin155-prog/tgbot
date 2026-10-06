@@ -56,6 +56,17 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS olympiad_events (
+                    event_id TEXT PRIMARY KEY,
+                    source_key TEXT NOT NULL,
+                    start_date TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+                """
+            )
 
     def add_subscriber(self, chat_id: int) -> bool:
         with closing(self._connect()) as conn, conn:
@@ -164,3 +175,29 @@ class Database:
                     """,
                     (key, content_hash),
                 )
+
+    def get_olympiad_event_dates(self, event_id: str) -> Optional[Tuple[str, str]]:
+        """Возвращает (start_date, end_date) в ISO, если это событие уже
+        заводили раньше, иначе None (значит, оно новое)."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT start_date, end_date FROM olympiad_events WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+            return (row[0], row[1]) if row else None
+
+    def save_olympiad_event(
+        self, event_id: str, source_key: str, start_date: str, end_date: str
+    ) -> None:
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                """
+                INSERT INTO olympiad_events (event_id, source_key, start_date, end_date, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(event_id) DO UPDATE SET
+                    start_date = excluded.start_date,
+                    end_date = excluded.end_date,
+                    updated_at = excluded.updated_at
+                """,
+                (event_id, source_key, start_date, end_date),
+            )

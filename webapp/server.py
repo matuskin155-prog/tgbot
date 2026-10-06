@@ -163,12 +163,30 @@ async def handle_olympiads_check(request: web.Request) -> web.Response:
     _require_admin(auth)
     settings: Settings = request.app["settings"]
     db: Database = request.app["db"]
+    calendar: GoogleCalendarClient = request.app["calendar"]
+    runtime: RuntimeConfig = request.app["runtime_config"]
     try:
-        changed = await check_olympiad_sources(db, settings.browser_executable_path)
+        result = await check_olympiad_sources(
+            db, calendar, runtime.calendar_id, settings.browser_executable_path
+        )
     except Exception as exc:
         logger.exception("Не удалось проверить страницы олимпиад")
         raise web.HTTPInternalServerError(text="Не получилось проверить страницы") from exc
-    return web.json_response({"changed": [{"name": s.name, "url": s.url} for s in changed]})
+    return web.json_response(
+        {
+            "changed": [{"name": s.name, "url": s.url} for s in result.changed],
+            "added_events": [
+                {
+                    "name": e.source.name,
+                    "url": e.source.url,
+                    "is_new": e.is_new,
+                    "start_date": e.start_date,
+                    "end_date": e.end_date,
+                }
+                for e in result.added_events
+            ],
+        }
+    )
 
 
 async def handle_config_update(request: web.Request) -> web.Response:

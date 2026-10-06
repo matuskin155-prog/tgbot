@@ -434,24 +434,39 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
 
     db: Database = context.bot_data["db"]
     settings: Settings = context.bot_data["settings"]
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
     await update.effective_message.reply_text(
         f"Проверяю {len(SOURCES)} страниц через браузер, это может занять минуту..."
     )
 
     try:
-        changed = await check_olympiad_sources(db, settings.browser_executable_path)
+        result = await check_olympiad_sources(
+            db, calendar, runtime.calendar_id, settings.browser_executable_path
+        )
     except Exception:
         logger.exception("Не удалось проверить страницы олимпиад")
         await update.effective_message.reply_text("Не получилось проверить страницы 😕")
         return
 
-    if not changed:
+    if not result.changed and not result.added_events:
         await update.effective_message.reply_text("Изменений с прошлой проверки не найдено.")
         return
 
-    lines = ["Изменились:"]
-    for source in changed:
-        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
+    lines = []
+    if result.added_events:
+        lines.append("Автоматически добавлены/обновлены в календаре:")
+        for event in result.added_events:
+            mark = "новое" if event.is_new else "дата изменилась"
+            lines.append(
+                f'• <a href="{event.source.url}">{escape(event.source.name)}</a> '
+                f"({mark}): {event.start_date}"
+            )
+        lines.append("")
+    if result.changed:
+        lines.append("Изменились:")
+        for source in result.changed:
+            lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )
