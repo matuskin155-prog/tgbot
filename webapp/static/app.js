@@ -69,18 +69,24 @@ function dateHeading(isoDate) {
   return `${WEEKDAYS[d.getDay()].replace(/^./, (c) => c.toUpperCase())}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-function eventCard(e, { tappable = false, index = 0 } = {}) {
+function eventCard(e, { tappable = false, index = 0, showDelete = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
   const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
   const countdownBadge = countdown
     ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
     : "";
-  // Кнопку "открыть в Google Calendar" не показываем на карточках для
-  // удаления - там сама карточка целиком уже кликабельна для другого
-  // действия, вложенная кнопка внутри неё только путала бы.
+  // "Открыть в Google Calendar" и кнопку удаления не показываем на
+  // карточках для удаления - там сама карточка целиком уже кликабельна
+  // для другого действия, вложенные кнопки внутри неё только путали бы.
   const calLink = !tappable && e.html_link
     ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Открыть в Google Calendar</button>`
+    : "";
+  const deleteBtn = !tappable && showDelete
+    ? `<button class="delete-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🗑 Удалить</button>`
+    : "";
+  const actionsRow = calLink || deleteBtn
+    ? `<div class="row-actions">${calLink}${deleteBtn}</div>`
     : "";
   return `
     <div class="card ${liveClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
@@ -91,7 +97,7 @@ function eventCard(e, { tappable = false, index = 0 } = {}) {
       </div>
       <div class="title">${escapeHtml(e.summary)}</div>
       ${e.location ? `<div class="loc">📍 ${escapeHtml(e.location)}</div>` : ""}
-      ${calLink}
+      ${actionsRow}
     </div>
   `;
 }
@@ -100,12 +106,12 @@ function emptyState(emoji, text) {
   return `<div class="empty"><span class="emoji">${emoji}</span>${text}</div>`;
 }
 
-function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false } = {}) {
+function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false, showDelete = false } = {}) {
   if (!events.length) return emptyState(emptyEmoji, emptyText);
-  return events.map((e, i) => eventCard(e, { tappable, index: i })).join("");
+  return events.map((e, i) => eventCard(e, { tappable, index: i, showDelete })).join("");
 }
 
-function renderGroupedByDate(events) {
+function renderGroupedByDate(events, { showDelete = false } = {}) {
   if (!events.length) return emptyState("🎉", "Событий нет");
   let html = "";
   let lastDate = null;
@@ -114,20 +120,27 @@ function renderGroupedByDate(events) {
       html += `<div class="date-heading">${dateHeading(e.date)}</div>`;
       lastDate = e.date;
     }
-    html += eventCard(e, { index: i });
+    html += eventCard(e, { index: i, showDelete });
   });
   return html;
 }
 
-// Вешает обработчики на кнопки "открыть в Google Calendar", добавленные
-// в eventCard() - вызывать после каждой вставки renderEventList()/
-// renderGroupedByDate() в DOM.
-function bindCalLinks() {
+// Вешает обработчики на кнопки "открыть в Google Calendar" и "удалить",
+// добавленные в eventCard() - вызывать после каждой вставки
+// renderEventList()/renderGroupedByDate() в DOM.
+function bindCardActions(onDeleted) {
   content.querySelectorAll(".cal-link").forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       haptic("light");
       tg.openLink(btn.dataset.link);
+    };
+  });
+  content.querySelectorAll(".delete-btn").forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      haptic("light");
+      confirmDelete(btn.dataset.id, btn.dataset.summary, onDeleted);
     };
   });
 }
@@ -163,8 +176,10 @@ async function showToday() {
   try {
     const events = await api("/api/events/today");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
-    content.innerHTML = subBtn + renderEventList(events, { emptyEmoji: "🎉", emptyText: "Событий на сегодня нет" });
-    bindCalLinks();
+    content.innerHTML = subBtn + renderEventList(events, {
+      emptyEmoji: "🎉", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin,
+    });
+    bindCardActions(showToday);
   } catch (e) {
     content.innerHTML = subBtn + emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
   }
@@ -192,8 +207,8 @@ async function showUpcoming() {
   try {
     const events = await api("/api/events/upcoming");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
-    content.innerHTML = renderGroupedByDate(events);
-    bindCalLinks();
+    content.innerHTML = renderGroupedByDate(events, { showDelete: STATE.is_admin });
+    bindCardActions(showUpcoming);
   } catch (e) {
     content.innerHTML = emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
   }
@@ -337,7 +352,7 @@ async function showDeletePicker() {
     content.querySelectorAll(".card.tappable").forEach((card) => {
       card.onclick = () => {
         haptic("light");
-        confirmDelete(card.dataset.id, card.querySelector(".title").textContent);
+        confirmDelete(card.dataset.id, card.querySelector(".title").textContent, showDeletePicker);
       };
     });
   }
@@ -351,7 +366,7 @@ function bindBack() {
   document.getElementById("back-btn").onclick = showSettings;
 }
 
-function confirmDelete(eventId, summary) {
+function confirmDelete(eventId, summary, onDone) {
   tg.showConfirm(`Удалить «${summary}» из календаря? Это затронет всех подписчиков.`, async (confirmed) => {
     if (!confirmed) return;
     try {
@@ -362,7 +377,7 @@ function confirmDelete(eventId, summary) {
       hapticNotify("error");
       tg.showAlert("Ошибка: " + e.message);
     }
-    showDeletePicker();
+    (onDone || showDeletePicker)();
   });
 }
 

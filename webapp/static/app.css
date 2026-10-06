@@ -130,11 +130,18 @@ body {
   border-radius: 20px;
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .cal-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-top: 7px;
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
@@ -144,6 +151,21 @@ body {
   cursor: pointer;
 }
 .cal-link:active { opacity: 0.6; }
+
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--live);
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: auto;
+  cursor: pointer;
+}
+.delete-btn:active { opacity: 0.6; }
 
 /* --- Группировка по дате (Ближайшие) --- */
 .date-heading {
