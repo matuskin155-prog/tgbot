@@ -13,7 +13,12 @@ def _parse_minutes(raw: str) -> List[int]:
     for part in raw.split(","):
         part = part.strip()
         if part:
-            minutes.append(int(part))
+            value = int(part)
+            if value < 1:
+                raise ValueError(
+                    "REMINDER_MINUTES_BEFORE должен состоять из чисел больше нуля"
+                )
+            minutes.append(value)
     if not minutes:
         raise ValueError("REMINDER_MINUTES_BEFORE не может быть пустым")
     return sorted(set(minutes), reverse=True)

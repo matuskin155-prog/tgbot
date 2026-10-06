@@ -255,6 +255,10 @@ async def set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     context.job_queue.run_repeating(
         check_reminders, interval=new_interval, first=5, name="check_reminders"
     )
+    # sync_schedule_job сверяет текущий интервал именно с этим значением —
+    # не обновив его, она решит, что настройка разошлась с базой, и через
+    # ≤30 сек пересоздаст эту же задачу ещё раз.
+    context.bot_data["_last_interval"] = new_interval
     await update.effective_message.reply_text(f"Интервал опроса обновлён: {new_interval} сек.")
 
 
@@ -299,6 +303,9 @@ def _reschedule_daily_digest(context: ContextTypes.DEFAULT_TYPE, runtime: Runtim
         job.schedule_removal()
     digest_time = runtime.daily_digest_time_obj.replace(tzinfo=ZoneInfo(runtime.timezone))
     context.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")
+    # См. комментарий в set_interval() - то же самое для sync_schedule_job
+    # и ключа сводки (иначе она пересоздаст эту же задачу ещё раз сама).
+    context.bot_data["_last_digest_key"] = (runtime.daily_digest_time, runtime.timezone)
 
 
 # --- Удаление события из календаря (с подтверждением через кнопки) ---

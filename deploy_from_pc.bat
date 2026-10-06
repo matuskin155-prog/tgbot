@@ -44,7 +44,11 @@ if exist server.ini (
 
 if not defined SERVER_IP (
     set /p SERVER_IP="Server IP: "
-    echo SERVER_IP=%SERVER_IP%> server.ini
+    rem Using !SERVER_IP! (delayed expansion), not %SERVER_IP% - inside a
+    rem parenthesized block cmd.exe expands %...% once, at parse time,
+    rem before "set /p" above even runs, which would always write an
+    rem empty value here.
+    echo SERVER_IP=!SERVER_IP!> server.ini
 )
 
 echo.

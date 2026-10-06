@@ -1,4 +1,5 @@
 from datetime import timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 from .google_calendar import CalendarEvent
@@ -14,9 +15,9 @@ def format_time_range(event: CalendarEvent, tz: ZoneInfo) -> str:
 def format_event_line(event: CalendarEvent, tz: ZoneInfo) -> str:
     """Одна строка списка событий: диапазон времени, название, место."""
     when = format_time_range(event, tz)
-    line = f"• {when} — {event.summary}"
+    line = f"• {when} — {escape(event.summary)}"
     if event.location:
-        line += f" ({event.location})"
+        line += f" ({escape(event.location)})"
     return line
 
 

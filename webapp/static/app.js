@@ -11,9 +11,12 @@ const titleEl = document.getElementById("page-title");
 let STATE = null;
 
 function escapeHtml(str) {
+  // Используется и для текста, и для значений внутри HTML-атрибутов
+  // (например data-id="...") - innerHTML сам по себе не экранирует
+  // кавычки (они не нужны для текстовых узлов), поэтому добавляем это вручную.
   const div = document.createElement("div");
   div.textContent = str ?? "";
-  return div.innerHTML;
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 async function api(path, options = {}) {

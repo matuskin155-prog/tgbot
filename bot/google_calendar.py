@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
@@ -31,6 +32,11 @@ class GoogleCalendarClient:
         self._service = build(
             "calendar", "v3", credentials=credentials, cache_discovery=False
         )
+        # Один и тот же self._service (а под ним — httplib2-транспорт, он не
+        # thread-safe) вызывается из разных потоков через asyncio.to_thread
+        # и командами в чате, и фоновыми задачами одновременно. Лок сериализует
+        # обращения, чтобы не ловить редкие гонки при параллельных запросах.
+        self._lock = threading.Lock()
 
     def get_upcoming_events(self, lookahead_hours: int, calendar_id: str) -> List[CalendarEvent]:
         now = datetime.now(timezone.utc)
@@ -44,26 +50,29 @@ class GoogleCalendarClient:
         return self._list_events(start_of_day, end_of_day, calendar_id)
 
     def get_event(self, event_id: str, calendar_id: str) -> CalendarEvent:
-        item = self._service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        with self._lock:
+            item = self._service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         return self._parse_event(item)
 
     def delete_event(self, event_id: str, calendar_id: str) -> None:
-        self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        with self._lock:
+            self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
 
     def _list_events(
         self, time_min: datetime, time_max: datetime, calendar_id: str
     ) -> List[CalendarEvent]:
-        events_result = (
-            self._service.events()
-            .list(
-                calendarId=calendar_id,
-                timeMin=time_min.isoformat(),
-                timeMax=time_max.isoformat(),
-                singleEvents=True,
-                orderBy="startTime",
+        with self._lock:
+            events_result = (
+                self._service.events()
+                .list(
+                    calendarId=calendar_id,
+                    timeMin=time_min.isoformat(),
+                    timeMax=time_max.isoformat(),
+                    singleEvents=True,
+                    orderBy="startTime",
+                )
+                .execute()
             )
-            .execute()
-        )
 
         events = []
         for item in events_result.get("items", []):

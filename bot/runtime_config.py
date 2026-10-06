@@ -134,11 +134,20 @@ def _parse_minutes(raw: str) -> List[int]:
         if not part:
             continue
         try:
-            minutes.append(int(part))
+            value = int(part)
         except ValueError as exc:
             raise ConfigError(
                 "Список должен быть числами через запятую, например: 60,10"
             ) from exc
+        if value < 1:
+            # check_reminders() пропускает события, время которых уже
+            # наступило (minutes_until <= 0) раньше, чем успевает сравнить
+            # его с порогом — поэтому порог 0 или меньше никогда не сработает.
+            raise ConfigError(
+                "Напоминания можно ставить только на число минут БОЛЬШЕ нуля "
+                "(например: 60,10) — за 0 минут напоминание прислать не успеет"
+            )
+        minutes.append(value)
     if not minutes:
         raise ConfigError("Нужно указать хотя бы одно значение, например: 60,10")
     return sorted(set(minutes), reverse=True)
