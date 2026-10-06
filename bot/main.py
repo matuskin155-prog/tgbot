@@ -121,9 +121,15 @@ def main() -> None:
         ),
     )
 
-    application = (
-        Application.builder().token(settings.telegram_token).post_init(_post_init).build()
-    )
+    builder = Application.builder().token(settings.telegram_token).post_init(_post_init)
+    if settings.telegram_proxy_url:
+        # Нужен, если сервер не может напрямую достучаться до серверов Telegram
+        # (бывает у некоторых хостингов/регионов) — весь трафик к Bot API,
+        # включая долгий опрос getUpdates, идёт через указанный прокси.
+        builder = builder.proxy(settings.telegram_proxy_url).get_updates_proxy(
+            settings.telegram_proxy_url
+        )
+    application = builder.build()
     application.bot_data["settings"] = settings
     application.bot_data["db"] = db
     application.bot_data["calendar"] = calendar

@@ -52,6 +52,7 @@ class Settings:
     daily_digest_time: str
     browser_executable_path: Optional[str]
     webapp_url: Optional[str]
+    telegram_proxy_url: Optional[str]
 
 
 def load_settings() -> Settings:
@@ -74,4 +75,5 @@ def load_settings() -> Settings:
         daily_digest_time=_parse_digest_time(os.environ.get("DAILY_DIGEST_TIME", "10:00")),
         browser_executable_path=os.environ.get("BROWSER_EXECUTABLE_PATH") or None,
         webapp_url=os.environ.get("WEBAPP_URL") or None,
+        telegram_proxy_url=os.environ.get("TELEGRAM_PROXY_URL") or None,
     )
