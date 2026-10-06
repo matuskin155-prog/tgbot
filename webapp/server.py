@@ -268,9 +268,12 @@ def main() -> None:
         level=logging.INFO,
     )
     app = create_app()
-    # Слушаем только localhost — наружу (443, HTTPS) смотрит Caddy,
-    # который проксирует сюда (см. Caddyfile).
-    web.run_app(app, host="127.0.0.1", port=8787)
+    # Слушаем только localhost — наружу (443, HTTPS) смотрит Caddy или
+    # Cloudflare Tunnel, который проксирует сюда (см. Caddyfile/
+    # setup_cloudflare_tunnel.sh). Порт настраиваемый (WEBAPP_PORT в .env) —
+    # на случай, если 8787 уже занят другим вашим проектом на этом сервере.
+    settings: Settings = app["settings"]
+    web.run_app(app, host="127.0.0.1", port=settings.webapp_port)
 
 
 if __name__ == "__main__":

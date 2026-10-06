@@ -28,6 +28,11 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Порт настраиваемый - на случай, если 8787 занят другим вашим проектом на
+# этом же сервере (впишите WEBAPP_PORT=другой-порт в .env и перезапустите).
+WEBAPP_PORT="$(grep -E '^WEBAPP_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+WEBAPP_PORT="${WEBAPP_PORT:-8787}"
+
 echo "==> Устанавливаю cloudflared..."
 if ! command -v cloudflared >/dev/null 2>&1; then
     TMP_DEB="$(mktemp --suffix=.deb)"
@@ -76,6 +81,8 @@ cat > "$SCRIPT_DIR/cloudflared_tunnel_watch.sh" <<'WATCHER'
 set -uo pipefail
 cd "$(dirname "$0")"
 ENV_FILE="$(pwd)/.env"
+WEBAPP_PORT="$(grep -E '^WEBAPP_PORT=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+WEBAPP_PORT="${WEBAPP_PORT:-8787}"
 
 update_webapp_url() {
     local new_url="$1"
@@ -93,7 +100,7 @@ update_webapp_url() {
     systemctl restart tgbot.service
 }
 
-cloudflared tunnel --url http://127.0.0.1:8787 --no-autoupdate 2>&1 | while IFS= read -r line; do
+cloudflared tunnel --url "http://127.0.0.1:${WEBAPP_PORT}" --no-autoupdate 2>&1 | while IFS= read -r line; do
     echo "$line"
     if [[ "$line" =~ (https://[A-Za-z0-9-]+\.trycloudflare\.com) ]]; then
         update_webapp_url "${BASH_REMATCH[1]}"

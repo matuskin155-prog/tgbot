@@ -113,12 +113,16 @@ fi
 echo "=== 5/5: Mini App (веб-приложение) ==="
 WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
 WEBAPP_VIA_TUNNEL="$(grep -E '^WEBAPP_VIA_CLOUDFLARE_TUNNEL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+# Порт настраиваемый - на случай, если 8787 уже занят другим вашим проектом
+# на этом же сервере (измените WEBAPP_PORT в .env и запустите deploy.sh ещё раз).
+WEBAPP_PORT="$(grep -E '^WEBAPP_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+WEBAPP_PORT="${WEBAPP_PORT:-8787}"
 if [ -n "$WEBAPP_DOMAIN" ]; then
     apt-get install -y caddy
 
     cat > /etc/caddy/Caddyfile <<EOF
 $WEBAPP_DOMAIN {
-    reverse_proxy 127.0.0.1:8787
+    reverse_proxy 127.0.0.1:$WEBAPP_PORT
 }
 EOF
     systemctl enable caddy
