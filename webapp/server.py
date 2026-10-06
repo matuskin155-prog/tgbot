@@ -7,7 +7,7 @@ from aiohttp import web
 
 from bot.config import Settings, load_settings
 from bot.database import Database
-from bot.formatting import format_time_range
+from bot.formatting import format_time_range, is_event_ongoing
 from bot.google_calendar import GoogleCalendarClient
 from bot.olympiad_watch import check_olympiad_sources
 from bot.olympiads import SOURCES
@@ -81,6 +81,9 @@ async def _events_payload(request: web.Request, hours: int) -> list:
             "summary": event.summary,
             "when": format_time_range(event, tz),
             "location": event.location,
+            "date": event.start.astimezone(tz).date().isoformat(),
+            "is_ongoing": is_event_ongoing(event),
+            "all_day": event.all_day,
         }
         for event in events
     ]

@@ -5,6 +5,18 @@ from zoneinfo import ZoneInfo
 from .google_calendar import CalendarEvent
 
 
+def is_event_ongoing(event: CalendarEvent) -> bool:
+    """Идёт ли событие прямо сейчас (между его началом и концом)."""
+    if event.end is None:
+        return False
+    if event.all_day:
+        today = datetime.now(timezone.utc).date()
+        inclusive_end = (event.end - timedelta(days=1)).date()
+        return event.start.date() < today <= inclusive_end
+    now = datetime.now(timezone.utc)
+    return event.start <= now <= event.end
+
+
 def format_time_range(event: CalendarEvent, tz: ZoneInfo) -> str:
     """Диапазон начала–конца события в заданном часовом поясе.
 
@@ -35,8 +47,7 @@ def _format_all_day_range(event: CalendarEvent) -> str:
     if inclusive_end.date() <= event.start.date():
         return start_str
 
-    today = datetime.now(timezone.utc).date()
-    if event.start.date() < today <= inclusive_end.date():
+    if is_event_ongoing(event):
         return f"идёт сейчас, до {inclusive_end.strftime('%d.%m.%Y')}"
     return f"{start_str} – {inclusive_end.strftime('%d.%m.%Y')}"
 
@@ -48,9 +59,9 @@ def _format_timed_range(event: CalendarEvent, tz: ZoneInfo) -> str:
         return start_str
 
     end_local = event.end.astimezone(tz)
-    now = datetime.now(timezone.utc)
-    if event.start <= now <= event.end:
-        if end_local.date() == now.astimezone(tz).date():
+    if is_event_ongoing(event):
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+        if end_local.date() == now_local.date():
             return f"идёт сейчас, до {end_local.strftime('%H:%M')}"
         return f"идёт сейчас, до {end_local.strftime('%d.%m.%Y %H:%M')}"
 
