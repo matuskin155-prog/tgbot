@@ -90,7 +90,7 @@ systemctl enable tgbot
 systemctl restart tgbot
 
 echo "=== 4/5: проверка связи с Telegram ==="
-EXISTING_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+EXISTING_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
 if [ -n "$EXISTING_PROXY" ]; then
     echo "TELEGRAM_PROXY_URL уже задан в .env — пропускаю проверку."
 elif curl -sf --max-time 10 https://api.telegram.org/ -o /dev/null; then
@@ -101,7 +101,7 @@ else
     echo "обойти через Cloudflare WARP..."
     bash "$PROJECT_DIR/setup_warp_proxy.sh" || true
 
-    NEW_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+    NEW_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
     if [ -n "$NEW_PROXY" ]; then
         echo "Cloudflare WARP помог, бот переключён на $NEW_PROXY."
     else
@@ -111,7 +111,7 @@ else
 fi
 
 echo "=== 5/5: Mini App (веб-приложение), если задан WEBAPP_DOMAIN ==="
-WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
 if [ -n "$WEBAPP_DOMAIN" ]; then
     apt-get install -y caddy
 

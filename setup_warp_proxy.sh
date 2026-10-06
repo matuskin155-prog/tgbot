@@ -54,7 +54,7 @@ echo "==> Регистрирую клиента WARP (если ещё не за�
 try_warp registration new || try_warp register || true
 
 echo "==> Включаю режим локального SOCKS5-прокси..."
-try_warp mode proxy || try_warp set-mode proxy
+try_warp mode proxy || try_warp set-mode proxy || true
 try_warp proxy port "${PROXY_PORT}" 2>/dev/null || true
 
 echo "==> Подключаюсь..."
