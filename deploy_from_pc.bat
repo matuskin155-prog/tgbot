@@ -12,8 +12,10 @@ rem   2) on first run, uploads .env and service_account.json from
 rem      this computer to the server (only if the server doesn't
 rem      already have them, so edits made directly on the server,
 rem      e.g. ADMIN_CHAT_IDS, are never overwritten);
-rem   3) runs deploy.sh on the server (installs dependencies,
-rem      sets up the systemd autostart service).
+rem   3) runs deploy.sh on the server (installs dependencies, sets up
+rem      the systemd autostart service, checks connectivity to
+rem      Telegram and auto-configures a Cloudflare WARP proxy if the
+rem      server's provider blocks Telegram directly).
 rem
 rem  The server IP is asked once and cached in server.ini, which
 rem  never reaches GitHub (see .gitignore).

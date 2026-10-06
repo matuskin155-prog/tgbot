@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Разворачивает бота на Debian/Ubuntu-сервере одной командой:
-# системные пакеты -> venv -> зависимости -> systemd-автозапуск.
+# системные пакеты -> venv -> зависимости -> systemd-автозапуск ->
+# проверка связи с Telegram (с авто-обходом через Cloudflare WARP,
+# если провайдер блокирует Telegram напрямую) -> Mini App.
 #
 # Секреты (.env с токеном, service_account.json) скрипт сам не создаёт —
 # при их отсутствии он остановится и скажет, что положить и куда.
@@ -17,7 +19,7 @@ fi
 cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 
-echo "=== 1/4: системные пакеты (python3, venv, Google Chrome) ==="
+echo "=== 1/5: системные пакеты (python3, venv, Google Chrome) ==="
 apt-get update
 apt-get install -y python3 python3-venv python3-pip wget
 
@@ -32,7 +34,7 @@ if [ ! -x /usr/bin/google-chrome ]; then
     rm -f "$TMP_DEB"
 fi
 
-echo "=== 2/4: виртуальное окружение и зависимости ==="
+echo "=== 2/5: виртуальное окружение и зависимости ==="
 if [ ! -d .venv ]; then
     python3 -m venv .venv
 fi
@@ -66,7 +68,7 @@ if [ -n "$BROWSER_PATH" ]; then
     fi
 fi
 
-echo "=== 3/4: systemd-автозапуск бота ==="
+echo "=== 3/5: systemd-автозапуск бота ==="
 cat > /etc/systemd/system/tgbot.service <<EOF
 [Unit]
 Description=Telegram Google Calendar reminder bot
@@ -87,7 +89,28 @@ systemctl daemon-reload
 systemctl enable tgbot
 systemctl restart tgbot
 
-echo "=== 4/4: Mini App (веб-приложение), если задан WEBAPP_DOMAIN ==="
+echo "=== 4/5: проверка связи с Telegram ==="
+EXISTING_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+if [ -n "$EXISTING_PROXY" ]; then
+    echo "TELEGRAM_PROXY_URL уже задан в .env — пропускаю проверку."
+elif curl -sf --max-time 10 https://api.telegram.org/ -o /dev/null; then
+    echo "Telegram доступен напрямую — прокси не нужен."
+else
+    echo "Сервер не достучался до Telegram напрямую (бывает у некоторых"
+    echo "хостингов/регионов — не связано с кодом бота). Пробую автоматически"
+    echo "обойти через Cloudflare WARP..."
+    bash "$PROJECT_DIR/setup_warp_proxy.sh" || true
+
+    NEW_PROXY="$(grep -E '^TELEGRAM_PROXY_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+    if [ -n "$NEW_PROXY" ]; then
+        echo "Cloudflare WARP помог, бот переключён на $NEW_PROXY."
+    else
+        echo "Cloudflare WARP не помог (провайдер блокирует и его) — нужен"
+        echo "zapret, см. README.md, раздел «Если блокируют и WARP: zapret»."
+    fi
+fi
+
+echo "=== 5/5: Mini App (веб-приложение), если задан WEBAPP_DOMAIN ==="
 WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
 if [ -n "$WEBAPP_DOMAIN" ]; then
     apt-get install -y caddy

@@ -77,31 +77,36 @@ else
     WARP_WORKS=0
 fi
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-    echo >&2
-    echo "Не найден .env рядом со скриптом ($ENV_FILE) — впишите вручную:" >&2
-    echo "TELEGRAM_PROXY_URL=${PROXY_URL}" >&2
-    exit 1
-fi
-
-if grep -q '^TELEGRAM_PROXY_URL=' "${ENV_FILE}"; then
-    sed -i "s|^TELEGRAM_PROXY_URL=.*|TELEGRAM_PROXY_URL=${PROXY_URL}|" "${ENV_FILE}"
-else
-    echo "TELEGRAM_PROXY_URL=${PROXY_URL}" >> "${ENV_FILE}"
-fi
-echo
-echo "==> .env обновлён: TELEGRAM_PROXY_URL=${PROXY_URL}"
-
-if systemctl list-unit-files | grep -q '^tgbot.service'; then
-    echo "==> Перезапускаю tgbot.service..."
-    systemctl restart tgbot.service
-else
-    echo "==> Служба tgbot.service не найдена — перезапустите бота вручную."
-fi
-
-echo
+# .env правим только если WARP реально помог — иначе лучше оставить
+# TELEGRAM_PROXY_URL пустым, чем прописать нерабочий прокси (деплой-скрипт
+# по этому же признаку понимает, помог ли WARP, см. deploy.sh).
 if [[ "${WARP_WORKS}" -eq 1 ]]; then
+    if [[ ! -f "${ENV_FILE}" ]]; then
+        echo >&2
+        echo "Не найден .env рядом со скриптом ($ENV_FILE) — впишите вручную:" >&2
+        echo "TELEGRAM_PROXY_URL=${PROXY_URL}" >&2
+        exit 1
+    fi
+
+    if grep -q '^TELEGRAM_PROXY_URL=' "${ENV_FILE}"; then
+        sed -i "s|^TELEGRAM_PROXY_URL=.*|TELEGRAM_PROXY_URL=${PROXY_URL}|" "${ENV_FILE}"
+    else
+        echo "TELEGRAM_PROXY_URL=${PROXY_URL}" >> "${ENV_FILE}"
+    fi
+    echo
+    echo "==> .env обновлён: TELEGRAM_PROXY_URL=${PROXY_URL}"
+
+    if systemctl list-unit-files | grep -q '^tgbot.service'; then
+        echo "==> Перезапускаю tgbot.service..."
+        systemctl restart tgbot.service
+    else
+        echo "==> Служба tgbot.service не найдена — перезапустите бота вручную."
+    fi
+
+    echo
     echo "Готово. Проверьте бота в Telegram (/start)."
 else
-    echo "WARP настроен, но Telegram пока не отвечает — см. раздел про zapret в README.md."
+    echo
+    echo "WARP настроен, но Telegram через него не отвечает — .env не трогаю."
+    echo "См. раздел про zapret в README.md."
 fi
