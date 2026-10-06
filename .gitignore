@@ -8,3 +8,4 @@ service_account.json
 token.json
 bot_data.sqlite3
 *.sqlite3
+server.ini
