@@ -49,27 +49,54 @@ ADMIN_EXTRA_COMMANDS = [
 ]
 
 
+_UI_SETUP_TIMEOUT = 15
+
+
 async def _post_init(application: Application) -> None:
+    # Настройка меню команд и кнопки мини-приложения — это некритичная
+    # "косметика". PTB ждёт завершения post_init перед тем, как начать
+    # реально обрабатывать сообщения, поэтому запускаем это фоновой
+    # задачей: даже если Telegram API окажется медленным или недоступным,
+    # это не должно задерживать (а тем более — навсегда блокировать) запуск
+    # основного цикла бота. Раньше первый вызов ниже был вообще без
+    # try/except и без таймаута — одно медленное зависание на старте
+    # означало, что бот никогда не доходил до polling.
+    asyncio.create_task(_configure_bot_ui(application))
+
+
+async def _configure_bot_ui(application: Application) -> None:
     settings: Settings = application.bot_data["settings"]
 
-    await application.bot.set_my_commands(BASE_COMMANDS)
+    try:
+        await asyncio.wait_for(
+            application.bot.set_my_commands(BASE_COMMANDS), timeout=_UI_SETUP_TIMEOUT
+        )
+    except (TelegramError, asyncio.TimeoutError):
+        logger.warning("Не удалось настроить базовое меню команд", exc_info=True)
+
     for admin_id in settings.admin_chat_ids:
         try:
-            await application.bot.set_my_commands(
-                BASE_COMMANDS + ADMIN_EXTRA_COMMANDS,
-                scope=BotCommandScopeChat(chat_id=admin_id),
+            await asyncio.wait_for(
+                application.bot.set_my_commands(
+                    BASE_COMMANDS + ADMIN_EXTRA_COMMANDS,
+                    scope=BotCommandScopeChat(chat_id=admin_id),
+                ),
+                timeout=_UI_SETUP_TIMEOUT,
             )
-        except TelegramError:
+        except (TelegramError, asyncio.TimeoutError):
             logger.warning("Не удалось настроить меню команд для чата %s", admin_id)
 
     if settings.webapp_url:
         try:
-            await application.bot.set_chat_menu_button(
-                menu_button=MenuButtonWebApp(
-                    text="Открыть", web_app=WebAppInfo(url=settings.webapp_url)
-                )
+            await asyncio.wait_for(
+                application.bot.set_chat_menu_button(
+                    menu_button=MenuButtonWebApp(
+                        text="Открыть", web_app=WebAppInfo(url=settings.webapp_url)
+                    )
+                ),
+                timeout=_UI_SETUP_TIMEOUT,
             )
-        except TelegramError:
+        except (TelegramError, asyncio.TimeoutError):
             logger.warning("Не удалось установить кнопку мини-приложения в меню чата")
 
 
