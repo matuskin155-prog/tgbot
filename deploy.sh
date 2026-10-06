@@ -110,8 +110,9 @@ else
     fi
 fi
 
-echo "=== 5/5: Mini App (веб-приложение), если задан WEBAPP_DOMAIN ==="
+echo "=== 5/5: Mini App (веб-приложение) ==="
 WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+WEBAPP_VIA_TUNNEL="$(grep -E '^WEBAPP_VIA_CLOUDFLARE_TUNNEL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
 if [ -n "$WEBAPP_DOMAIN" ]; then
     apt-get install -y caddy
 
@@ -155,23 +156,35 @@ EOF
     # tgbot.service уже мог успеть запуститься со старым WEBAPP_URL (пустым) —
     # перезапускаем, чтобы кнопка приложения в Telegram подхватила новый адрес.
     systemctl restart tgbot
+elif [ -n "$WEBAPP_VIA_TUNNEL" ]; then
+    echo "WEBAPP_DOMAIN не задан, но включён WEBAPP_VIA_CLOUDFLARE_TUNNEL —"
+    echo "поднимаю Mini App без домена через Cloudflare Tunnel..."
+    bash "$PROJECT_DIR/setup_cloudflare_tunnel.sh" || true
 else
-    echo "WEBAPP_DOMAIN не задан в .env — пропускаю настройку мини-приложения."
-    echo "Чтобы включить: впишите WEBAPP_DOMAIN=ваш.домен в .env и запустите"
-    echo "sudo bash deploy.sh ещё раз."
+    echo "WEBAPP_DOMAIN и WEBAPP_VIA_CLOUDFLARE_TUNNEL не заданы в .env —"
+    echo "пропускаю настройку мини-приложения. Варианты (см. README,"
+    echo "раздел «Mini App»): свой домен — впишите WEBAPP_DOMAIN=ваш.домен,"
+    echo "или без домена бесплатно — впишите WEBAPP_VIA_CLOUDFLARE_TUNNEL=1."
+    echo "Затем запустите sudo bash deploy.sh ещё раз."
 fi
 
 echo "=== Статус ==="
 sleep 2
 systemctl status tgbot --no-pager || true
-if [ -n "$WEBAPP_DOMAIN" ]; then
+if [ -n "$WEBAPP_DOMAIN" ] || [ -n "$WEBAPP_VIA_TUNNEL" ]; then
     systemctl status tgbot-webapp --no-pager || true
+fi
+if [ -n "$WEBAPP_VIA_TUNNEL" ] && [ -z "$WEBAPP_DOMAIN" ]; then
+    systemctl status cloudflared-tunnel --no-pager || true
 fi
 
 echo
 echo "Готово. Логи бота: journalctl -u tgbot -f"
-if [ -n "$WEBAPP_DOMAIN" ]; then
+if [ -n "$WEBAPP_DOMAIN" ] || [ -n "$WEBAPP_VIA_TUNNEL" ]; then
     echo "Логи Mini App: journalctl -u tgbot-webapp -f"
+fi
+if [ -n "$WEBAPP_VIA_TUNNEL" ] && [ -z "$WEBAPP_DOMAIN" ]; then
+    echo "Логи туннеля: journalctl -u cloudflared-tunnel -f"
 fi
 echo "Дальше в Telegram: /start, затем /whoami -> впишите chat_id в .env как"
 echo "ADMIN_CHAT_IDS и перезапустите: systemctl restart tgbot"
