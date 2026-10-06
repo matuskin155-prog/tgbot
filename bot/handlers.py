@@ -458,8 +458,9 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
         lines.append("Автоматически добавлены/обновлены в календаре:")
         for event in result.added_events:
             mark = "новое" if event.is_new else "дата изменилась"
+            label_suffix = f" — {escape(event.label)}" if event.label else ""
             lines.append(
-                f'• <a href="{event.source.url}">{escape(event.source.name)}</a> '
+                f'• <a href="{event.source.url}">{escape(event.source.name)}</a>{label_suffix} '
                 f"({mark}): {event.start_date}"
             )
         lines.append("")

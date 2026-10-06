@@ -182,6 +182,7 @@ async def handle_olympiads_check(request: web.Request) -> web.Response:
                     "is_new": e.is_new,
                     "start_date": e.start_date,
                     "end_date": e.end_date,
+                    "label": e.label,
                 }
                 for e in result.added_events
             ],

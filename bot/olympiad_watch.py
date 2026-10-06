@@ -33,6 +33,7 @@ class AddedOlympiadEvent:
     start_date: str
     end_date: str
     context: str
+    label: Optional[str] = None
 
 
 def _event_id(source_key: str, index: int) -> str:
@@ -71,11 +72,12 @@ def _sync_calendar_events(
             f"⚠️ Дата определена автоматически с сайта олимпиады, сверьте: {source.url}\n\n"
             f"Контекст со страницы: «{candidate.context}»"
         )
+        label_suffix = f" — {candidate.label}" if candidate.label else ""
         try:
             calendar.upsert_event(
                 event_id=event_id,
                 calendar_id=calendar_id,
-                summary=f"📅 {source.name} (авто)",
+                summary=f"📅 {source.name}{label_suffix} (авто)",
                 description=description,
                 start_date=candidate.start,
                 end_date=candidate.end,
@@ -94,6 +96,7 @@ def _sync_calendar_events(
                 start_date=new_start,
                 end_date=new_end,
                 context=candidate.context,
+                label=candidate.label,
             )
         )
 
@@ -220,8 +223,9 @@ async def check_olympiads_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             date_range = event.start_date
             if inclusive_end.isoformat() != event.start_date:
                 date_range += f" – {inclusive_end.isoformat()}"
+            label_suffix = f" — {escape(event.label)}" if event.label else ""
             lines.append(
-                f'• <a href="{event.source.url}">{escape(event.source.name)}</a> '
+                f'• <a href="{event.source.url}">{escape(event.source.name)}</a>{label_suffix} '
                 f"({mark}): {date_range}"
             )
         lines.append("Даты определены автоматически по тексту страницы — сверьте на сайте.")
