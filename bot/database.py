@@ -11,7 +11,11 @@ class Database:
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._path)
+        # timeout и WAL — чтобы бот и веб-приложение (два отдельных процесса)
+        # могли безопасно читать/писать в один файл базы одновременно.
+        conn = sqlite3.connect(self._path, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
 
     def _init_schema(self) -> None:
         with closing(self._connect()) as conn, conn:

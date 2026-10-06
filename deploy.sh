@@ -66,7 +66,7 @@ if [ -n "$BROWSER_PATH" ]; then
     fi
 fi
 
-echo "=== 3/4: systemd-автозапуск ==="
+echo "=== 3/4: systemd-автозапуск бота ==="
 cat > /etc/systemd/system/tgbot.service <<EOF
 [Unit]
 Description=Telegram Google Calendar reminder bot
@@ -87,11 +87,68 @@ systemctl daemon-reload
 systemctl enable tgbot
 systemctl restart tgbot
 
-echo "=== 4/4: статус ==="
+echo "=== 4/4: Mini App (веб-приложение), если задан WEBAPP_DOMAIN ==="
+WEBAPP_DOMAIN="$(grep -E '^WEBAPP_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+if [ -n "$WEBAPP_DOMAIN" ]; then
+    apt-get install -y caddy
+
+    cat > /etc/caddy/Caddyfile <<EOF
+$WEBAPP_DOMAIN {
+    reverse_proxy 127.0.0.1:8787
+}
+EOF
+    systemctl enable caddy
+    systemctl restart caddy
+
+    if grep -q "^WEBAPP_URL=.*$" .env 2>/dev/null; then
+        sed -i "s|^WEBAPP_URL=.*$|WEBAPP_URL=https://$WEBAPP_DOMAIN|" .env
+    else
+        echo "WEBAPP_URL=https://$WEBAPP_DOMAIN" >> .env
+    fi
+
+    cat > /etc/systemd/system/tgbot-webapp.service <<EOF
+[Unit]
+Description=Telegram bot Mini App web server
+After=network.target
+
+[Service]
+WorkingDirectory=$PROJECT_DIR
+ExecStart=$PROJECT_DIR/.venv/bin/python -m webapp.server
+EnvironmentFile=$PROJECT_DIR/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable tgbot-webapp
+    systemctl restart tgbot-webapp
+
+    echo "Mini App настроен на https://$WEBAPP_DOMAIN"
+    echo "Если домен только что направили на этот сервер — подождите несколько"
+    echo "минут, пока Caddy получит сертификат Let's Encrypt."
+
+    # tgbot.service уже мог успеть запуститься со старым WEBAPP_URL (пустым) —
+    # перезапускаем, чтобы кнопка приложения в Telegram подхватила новый адрес.
+    systemctl restart tgbot
+else
+    echo "WEBAPP_DOMAIN не задан в .env — пропускаю настройку мини-приложения."
+    echo "Чтобы включить: впишите WEBAPP_DOMAIN=ваш.домен в .env и запустите"
+    echo "sudo bash deploy.sh ещё раз."
+fi
+
+echo "=== Статус ==="
 sleep 2
 systemctl status tgbot --no-pager || true
+if [ -n "$WEBAPP_DOMAIN" ]; then
+    systemctl status tgbot-webapp --no-pager || true
+fi
 
 echo
-echo "Готово. Логи: journalctl -u tgbot -f"
+echo "Готово. Логи бота: journalctl -u tgbot -f"
+if [ -n "$WEBAPP_DOMAIN" ]; then
+    echo "Логи Mini App: journalctl -u tgbot-webapp -f"
+fi
 echo "Дальше в Telegram: /start, затем /whoami -> впишите chat_id в .env как"
 echo "ADMIN_CHAT_IDS и перезапустите: systemctl restart tgbot"

@@ -51,6 +51,7 @@ class Settings:
     admin_chat_ids: List[int]
     daily_digest_time: str
     browser_executable_path: Optional[str]
+    webapp_url: Optional[str]
 
 
 def load_settings() -> Settings:
@@ -72,4 +73,5 @@ def load_settings() -> Settings:
         admin_chat_ids=_parse_admin_ids(os.environ.get("ADMIN_CHAT_IDS", "")),
         daily_digest_time=_parse_digest_time(os.environ.get("DAILY_DIGEST_TIME", "10:00")),
         browser_executable_path=os.environ.get("BROWSER_EXECUTABLE_PATH") or None,
+        webapp_url=os.environ.get("WEBAPP_URL") or None,
     )

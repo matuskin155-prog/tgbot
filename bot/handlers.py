@@ -3,7 +3,7 @@ import logging
 from html import escape
 from zoneinfo import ZoneInfo
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 WELCOME_TEXT = (
     "Привет! Я присылаю напоминания о событиях из общего Google Calendar — "
     "подписаться на них может любой, кто напишет мне /subscribe.\n\n"
-    "Команды:\n"
+    "Нажмите кнопку ниже, чтобы открыть удобное приложение с календарём, "
+    "олимпиадами и настройками — или используйте команды:\n"
     "/subscribe — включить напоминания в этом чате\n"
     "/unsubscribe — выключить напоминания\n"
     "/today — события на ближайшие 24 часа\n"
@@ -52,10 +53,17 @@ DELETE_LIST_LIMIT = 30
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    settings: Settings = context.bot_data["settings"]
     text = WELCOME_TEXT
     if _is_admin(update, context):
         text += ADMIN_HELP_TEXT
-    await update.effective_message.reply_text(text)
+
+    keyboard = None
+    if settings.webapp_url:
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("📱 Открыть приложение", web_app=WebAppInfo(url=settings.webapp_url))]]
+        )
+    await update.effective_message.reply_text(text, reply_markup=keyboard)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

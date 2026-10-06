@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Календарь</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <h1 id="page-title">Сегодня</h1>
+  </header>
+  <main id="content"><div class="empty">Загрузка…</div></main>
+  <nav class="tabbar">
+    <button class="tab-btn active" data-tab="today"><span class="ic">📅</span><span>Сегодня</span></button>
+    <button class="tab-btn" data-tab="upcoming"><span class="ic">📆</span><span>Ближайшие</span></button>
+    <button class="tab-btn" data-tab="olympiads"><span class="ic">🏆</span><span>Олимпиады</span></button>
+    <button class="tab-btn" data-tab="settings"><span class="ic">⚙️</span><span>Ещё</span></button>
+  </nav>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

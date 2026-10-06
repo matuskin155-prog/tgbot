@@ -3,16 +3,19 @@ import logging
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
+from telegram import BotCommand, BotCommandScopeChat, MenuButtonWebApp, WebAppInfo
+from telegram.error import TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
 from . import handlers
-from .config import load_settings
+from .config import Settings, load_settings
 from .database import Database
 from .digest import send_daily_digest
 from .google_calendar import GoogleCalendarClient
 from .olympiad_watch import check_olympiads_job
 from .reminders import check_reminders
 from .runtime_config import Defaults, RuntimeConfig
+from .schedule_sync import sync_schedule_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -20,6 +23,54 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+BASE_COMMANDS = [
+    BotCommand("start", "Главное меню и кнопка приложения"),
+    BotCommand("today", "События на сегодня"),
+    BotCommand("upcoming", "Ближайшие события"),
+    BotCommand("subscribe", "Включить напоминания"),
+    BotCommand("unsubscribe", "Выключить напоминания"),
+    BotCommand("status", "Текущие настройки и статус подписки"),
+    BotCommand("olympiads", "Список отслеживаемых олимпиад"),
+    BotCommand("whoami", "Узнать свой chat_id"),
+    BotCommand("help", "Справка"),
+]
+
+ADMIN_EXTRA_COMMANDS = [
+    BotCommand("config", "Текущие настройки (админ)"),
+    BotCommand("set_calendar", "Сменить календарь"),
+    BotCommand("set_reminders", "За сколько минут напоминать"),
+    BotCommand("set_lookahead", "Горизонт просмотра"),
+    BotCommand("set_interval", "Интервал опроса календаря"),
+    BotCommand("set_timezone", "Часовой пояс"),
+    BotCommand("set_digest_time", "Время ежедневной сводки"),
+    BotCommand("delete_event", "Удалить событие из календаря"),
+    BotCommand("check_olympiads", "Проверить олимпиады сейчас"),
+]
+
+
+async def _post_init(application: Application) -> None:
+    settings: Settings = application.bot_data["settings"]
+
+    await application.bot.set_my_commands(BASE_COMMANDS)
+    for admin_id in settings.admin_chat_ids:
+        try:
+            await application.bot.set_my_commands(
+                BASE_COMMANDS + ADMIN_EXTRA_COMMANDS,
+                scope=BotCommandScopeChat(chat_id=admin_id),
+            )
+        except TelegramError:
+            logger.warning("Не удалось настроить меню команд для чата %s", admin_id)
+
+    if settings.webapp_url:
+        try:
+            await application.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="Открыть", web_app=WebAppInfo(url=settings.webapp_url)
+                )
+            )
+        except TelegramError:
+            logger.warning("Не удалось установить кнопку мини-приложения в меню чата")
 
 
 def main() -> None:
@@ -43,7 +94,9 @@ def main() -> None:
         ),
     )
 
-    application = Application.builder().token(settings.telegram_token).build()
+    application = (
+        Application.builder().token(settings.telegram_token).post_init(_post_init).build()
+    )
     application.bot_data["settings"] = settings
     application.bot_data["db"] = db
     application.bot_data["calendar"] = calendar
@@ -79,17 +132,29 @@ def main() -> None:
         first=5,
         name="check_reminders",
     )
+    application.bot_data["_last_interval"] = runtime_config.poll_interval_seconds
 
     digest_time = runtime_config.daily_digest_time_obj.replace(
         tzinfo=ZoneInfo(runtime_config.timezone)
     )
     application.job_queue.run_daily(send_daily_digest, time=digest_time, name="daily_digest")
+    application.bot_data["_last_digest_key"] = (
+        runtime_config.daily_digest_time,
+        runtime_config.timezone,
+    )
 
     application.job_queue.run_repeating(
         check_olympiads_job,
         interval=timedelta(hours=24),
         first=60,
         name="check_olympiads",
+    )
+
+    application.job_queue.run_repeating(
+        sync_schedule_job,
+        interval=30,
+        first=30,
+        name="sync_schedule",
     )
 
     logger.info(

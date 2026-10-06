@@ -7,3 +7,19 @@ services:
     volumes:
       - ./service_account.json:/app/service_account.json:ro
       - ./data:/app/data
+
+  # Mini App — веб-интерфейс бота (см. README, раздел «Mini App»).
+  # Нужен отдельный домен с HTTPS: поставьте свой реверс-прокси
+  # (например Caddy) на хосте, указывающий на 127.0.0.1:8787.
+  # Раскомментируйте, если настраиваете Mini App через Docker:
+  # webapp:
+  #   build: .
+  #   command: python -m webapp.server
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./service_account.json:/app/service_account.json:ro
+  #     - ./data:/app/data
+  #   ports:
+  #     - "127.0.0.1:8787:8787"
