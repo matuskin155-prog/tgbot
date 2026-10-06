@@ -84,6 +84,8 @@ async def _events_payload(request: web.Request, hours: int) -> list:
             "date": event.start.astimezone(tz).date().isoformat(),
             "is_ongoing": is_event_ongoing(event),
             "all_day": event.all_day,
+            "start_ts": event.start.isoformat(),
+            "html_link": event.html_link,
         }
         for event in events
     ]

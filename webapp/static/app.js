@@ -28,6 +28,30 @@ function setSubtitle(text) {
   subtitleEl.textContent = text;
 }
 
+// Тактильный отклик при касаниях - мелочь, но ощущается как нативное
+// приложение, а не веб-страница. Не у всех клиентов Telegram есть
+// HapticFeedback, поэтому молча игнорируем отсутствие.
+function haptic(style) {
+  try { tg.HapticFeedback && tg.HapticFeedback.impactOccurred(style || "light"); } catch (e) { /* нет в этом клиенте */ }
+}
+function hapticNotify(type) {
+  try { tg.HapticFeedback && tg.HapticFeedback.notificationOccurred(type); } catch (e) { /* нет в этом клиенте */ }
+}
+
+// Живой обратный отсчёт до начала события - обновляется на месте каждые
+// 20 секунд (ниже, setInterval), без повторных запросов к серверу.
+function countdownText(startTs) {
+  const diffMs = new Date(startTs).getTime() - Date.now();
+  if (diffMs <= 0) return null;
+  const totalMin = Math.round(diffMs / 60000);
+  if (totalMin > 180) return null; // дальше 3 часов не показываем - не актуально
+  if (totalMin < 1) return "меньше минуты";
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return `через ${h} ч${m ? " " + m + " мин" : ""}`;
+  return `через ${m} мин`;
+}
+
 const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
@@ -45,17 +69,29 @@ function dateHeading(isoDate) {
   return `${WEEKDAYS[d.getDay()].replace(/^./, (c) => c.toUpperCase())}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
-function eventCard(e, { tappable = false } = {}) {
+function eventCard(e, { tappable = false, index = 0 } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
+  const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
+  const countdownBadge = countdown
+    ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
+    : "";
+  // Кнопку "открыть в Google Calendar" не показываем на карточках для
+  // удаления - там сама карточка целиком уже кликабельна для другого
+  // действия, вложенная кнопка внутри неё только путала бы.
+  const calLink = !tappable && e.html_link
+    ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Открыть в Google Calendar</button>`
+    : "";
   return `
-    <div class="card ${liveClass} ${tappable ? "tappable" : ""}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
+    <div class="card ${liveClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
       <div class="row-top">
         <span class="time">${escapeHtml(e.when)}</span>
         ${liveBadge}
+        ${countdownBadge}
       </div>
       <div class="title">${escapeHtml(e.summary)}</div>
       ${e.location ? `<div class="loc">📍 ${escapeHtml(e.location)}</div>` : ""}
+      ${calLink}
     </div>
   `;
 }
@@ -66,21 +102,34 @@ function emptyState(emoji, text) {
 
 function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false } = {}) {
   if (!events.length) return emptyState(emptyEmoji, emptyText);
-  return events.map((e) => eventCard(e, { tappable })).join("");
+  return events.map((e, i) => eventCard(e, { tappable, index: i })).join("");
 }
 
 function renderGroupedByDate(events) {
   if (!events.length) return emptyState("🎉", "Событий нет");
   let html = "";
   let lastDate = null;
-  for (const e of events) {
+  events.forEach((e, i) => {
     if (e.date !== lastDate) {
       html += `<div class="date-heading">${dateHeading(e.date)}</div>`;
       lastDate = e.date;
     }
-    html += eventCard(e);
-  }
+    html += eventCard(e, { index: i });
+  });
   return html;
+}
+
+// Вешает обработчики на кнопки "открыть в Google Calendar", добавленные
+// в eventCard() - вызывать после каждой вставки renderEventList()/
+// renderGroupedByDate() в DOM.
+function bindCalLinks() {
+  content.querySelectorAll(".cal-link").forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      haptic("light");
+      tg.openLink(btn.dataset.link);
+    };
+  });
 }
 
 async function api(path, options = {}) {
@@ -115,10 +164,12 @@ async function showToday() {
     const events = await api("/api/events/today");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
     content.innerHTML = subBtn + renderEventList(events, { emptyEmoji: "🎉", emptyText: "Событий на сегодня нет" });
+    bindCalLinks();
   } catch (e) {
     content.innerHTML = subBtn + emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
   }
   document.getElementById("sub-toggle").onclick = async () => {
+    haptic("medium");
     await api(STATE.is_subscribed ? "/api/unsubscribe" : "/api/subscribe", { method: "POST" });
     await loadState();
     showToday();
@@ -142,6 +193,7 @@ async function showUpcoming() {
     const events = await api("/api/events/upcoming");
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
     content.innerHTML = renderGroupedByDate(events);
+    bindCalLinks();
   } catch (e) {
     content.innerHTML = emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
   }
@@ -158,8 +210,8 @@ async function showOlympiads() {
     const items = await api("/api/olympiads");
     const changedCount = items.filter((o) => o.changed).length;
     setSubtitle(`${items.length} отслеживается` + (changedCount ? ` · ${changedCount} обновилось` : ""));
-    html += items.map((o) => `
-      <div class="card">
+    html += items.map((o, i) => `
+      <div class="card" style="--i:${i}">
         <a href="${o.url}" target="_blank" rel="noopener">
           <div class="title">${escapeHtml(o.name)}${o.changed ? '<span class="badge new">● обновилось</span>' : ""}</div>
           <div class="olympiad-link">🔗 ${escapeHtml(new URL(o.url).hostname)}</div>
@@ -172,6 +224,7 @@ async function showOlympiads() {
   content.innerHTML = html;
   if (STATE.is_admin) {
     document.getElementById("check-olympiads").onclick = async (ev) => {
+      haptic("medium");
       ev.target.textContent = "Проверяю… (до минуты)";
       ev.target.disabled = true;
       try {
@@ -183,8 +236,10 @@ async function showOlympiads() {
         if (res.changed.length) {
           parts.push("Изменились страницы: " + res.changed.map((c) => c.name).join(", "));
         }
+        hapticNotify(parts.length ? "success" : "warning");
         tg.showAlert(parts.length ? parts.join("\n") : "Изменений не найдено");
       } catch (e) {
+        hapticNotify("error");
         tg.showAlert("Ошибка: " + e.message);
       }
       showOlympiads();
@@ -233,6 +288,7 @@ async function showSettings() {
   `;
 
   document.getElementById("save-settings").onclick = async () => {
+    haptic("medium");
     const btn = document.getElementById("save-settings");
     btn.disabled = true;
     try {
@@ -248,15 +304,17 @@ async function showSettings() {
         }),
       });
       await loadState();
+      hapticNotify("success");
       tg.showAlert("Сохранено! Интервал опроса и время сводки применятся в течение ~30 секунд.");
       showSettings();
     } catch (e) {
+      hapticNotify("error");
       tg.showAlert("Не сохранено: " + e.message);
       btn.disabled = false;
     }
   };
 
-  document.getElementById("open-delete").onclick = showDeletePicker;
+  document.getElementById("open-delete").onclick = () => { haptic("light"); showDeletePicker(); };
 }
 
 async function showDeletePicker() {
@@ -277,7 +335,10 @@ async function showDeletePicker() {
   } else {
     content.innerHTML = renderEventList(events, { tappable: true }) + backButton();
     content.querySelectorAll(".card.tappable").forEach((card) => {
-      card.onclick = () => confirmDelete(card.dataset.id, card.querySelector(".title").textContent);
+      card.onclick = () => {
+        haptic("light");
+        confirmDelete(card.dataset.id, card.querySelector(".title").textContent);
+      };
     });
   }
   bindBack();
@@ -295,8 +356,10 @@ function confirmDelete(eventId, summary) {
     if (!confirmed) return;
     try {
       await api("/api/events/delete", { method: "POST", body: JSON.stringify({ event_id: eventId }) });
+      hapticNotify("success");
       tg.showAlert("Событие удалено");
     } catch (e) {
+      hapticNotify("error");
       tg.showAlert("Ошибка: " + e.message);
     }
     showDeletePicker();
@@ -307,11 +370,27 @@ const TABS = { today: showToday, upcoming: showUpcoming, olympiads: showOlympiad
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.onclick = () => {
+    if (!btn.classList.contains("active")) haptic("light");
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     TABS[btn.dataset.tab]();
   };
 });
+
+// Обновляет текст обратного отсчёта на карточках раз в 20 секунд без
+// повторного запроса к серверу - просто пересчитывает разницу во времени
+// на уже отрисованных карточках (если текущая вкладка их не показывает,
+// просто ничего не находит и не делает).
+setInterval(() => {
+  content.querySelectorAll(".countdown[data-start-ts]").forEach((el) => {
+    const text = countdownText(el.dataset.startTs);
+    if (text) {
+      el.textContent = text;
+    } else {
+      el.remove();
+    }
+  });
+}, 20000);
 
 (async () => {
   try {

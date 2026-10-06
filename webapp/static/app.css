@@ -51,6 +51,13 @@ body {
   padding: 13px 15px 13px 18px;
   margin-bottom: 9px;
   overflow: hidden;
+  opacity: 0;
+  animation: card-in 0.28s ease-out forwards;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 .card::before {
   content: "";
@@ -112,6 +119,31 @@ body {
 .card a { color: inherit; text-decoration: none; }
 .card.tappable { cursor: pointer; transition: transform 0.08s ease; }
 .card.tappable:active { transform: scale(0.98); }
+
+.countdown {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--card-bg); /* запасной вариант для браузеров без color-mix() */
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+
+.cal-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.cal-link:active { opacity: 0.6; }
 
 /* --- Группировка по дате (Ближайшие) --- */
 .date-heading {
@@ -259,6 +291,19 @@ body {
   transition: color 0.1s ease, transform 0.08s ease;
 }
 .tab-btn:active { transform: scale(0.94); }
-.tab-btn .ic { font-size: 20px; }
+.tab-btn .ic {
+  font-size: 18px;
+  width: 32px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+.tab-btn.active .ic {
+  background: var(--card-bg);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 .tab-btn span:last-child { font-size: 11px; font-weight: 500; }
 .tab-btn.active { color: var(--accent); }
