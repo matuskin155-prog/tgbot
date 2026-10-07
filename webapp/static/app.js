@@ -69,6 +69,58 @@ function dateHeading(isoDate) {
   return `${WEEKDAYS[d.getDay()].replace(/^./, (c) => c.toUpperCase())}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
+// Наглядный блок "Этот месяц": сколько событий осталось до конца месяца,
+// сколько из них по олимпиадам, и простая разбивка загруженности по
+// неделям - чтобы сразу видеть, насколько насыщенный месяц, не открывая
+// отдельно "Ближайшие" (у которых горизонт обычно гораздо короче месяца).
+function buildMonthSummary(events) {
+  const total = events.length;
+  const olympiadCount = events.filter((e) => e.olympiad_url).length;
+
+  const weeks = [0, 0, 0, 0, 0];
+  for (const e of events) {
+    const day = parseInt(e.date.slice(8, 10), 10);
+    weeks[Math.min(4, Math.floor((day - 1) / 7))] += 1;
+  }
+  const maxWeek = Math.max(1, ...weeks);
+  const bars = weeks.map((count) => {
+    const pct = count === 0 ? 0 : Math.max(12, Math.round((count / maxWeek) * 100));
+    const opacity = count === 0 ? 0.25 : (0.4 + 0.6 * (count / maxWeek)).toFixed(2);
+    return `
+      <div class="month-bar-col">
+        <div class="month-bar-track"><div class="month-bar" style="height:${pct}%; opacity:${opacity}"></div></div>
+        <div class="month-bar-count">${count || "–"}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="month-card">
+      <div class="month-header">📊 Этот месяц</div>
+      <div class="month-stats">
+        <div class="month-stat">
+          <div class="month-stat-num">${total}</div>
+          <div class="month-stat-label">${pluralEvents(total)} осталось</div>
+        </div>
+        <div class="month-stat olympiad">
+          <div class="month-stat-num">${olympiadCount}</div>
+          <div class="month-stat-label">из них олимпиад</div>
+        </div>
+      </div>
+      ${total ? `<div class="month-bars">${bars}</div><div class="month-bars-hint">по неделям месяца</div>` : ""}
+    </div>
+  `;
+}
+
+async function fetchMonthSummary() {
+  try {
+    const events = await api("/api/events/month");
+    return buildMonthSummary(events);
+  } catch (e) {
+    return "";
+  }
+}
+
 function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const olympiadClass = e.olympiad_url ? "is-olympiad" : "";
@@ -210,9 +262,9 @@ async function showToday() {
     : '<button class="btn" id="sub-toggle">🔔 Подписаться на напоминания</button>';
   content.innerHTML = subBtn + skeleton(2);
   try {
-    const events = await api("/api/events/today");
+    const [events, monthBlock] = await Promise.all([api("/api/events/today"), fetchMonthSummary()]);
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
-    content.innerHTML = subBtn + renderEventList(events, {
+    content.innerHTML = monthBlock + subBtn + renderEventList(events, {
       emptyEmoji: "🎉", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin, showHide: true,
     });
     bindCardActions(showToday);

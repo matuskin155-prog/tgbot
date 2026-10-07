@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass(frozen=True)
@@ -52,3 +53,57 @@ SOURCES: List[OlympiadSource] = [
     OlympiadSource("turlom", "Турнир Ломоносова", "http://турлом.цпм.рф/"),
     OlympiadSource("belchonok", "Бельчонок", "http://dovuz.sfu-kras.ru/belchonok"),
 ]
+
+
+_STOPWORDS = {"им", "по", "и", "для", "на", "в", "с", "из"}
+
+
+def _content_words(name: str) -> List[str]:
+    # Снимаем декоративные кавычки/скобки и пунктуацию («им.», «П.», «Д.»),
+    # выкидываем служебные слова и инициалы — остаются только значимые слова,
+    # по которым и будем сравнивать.
+    cleaned = re.sub(r"[«»\"().,]", " ", name)
+    return [w for w in cleaned.split() if len(w) > 2 and w.lower() not in _STOPWORDS]
+
+
+def _word_stem_pattern(word: str) -> str:
+    # Русский язык падежный — "олимпиада"/"олимпиаду"/"олимпиады" и подобное
+    # не совпадут буквально. Отрезаем правдоподобную длину окончания и
+    # досопоставляем остаток любыми буквами, вместо точного сравнения слова.
+    stem = word[:-2] if len(word) > 6 else word[:-1] if len(word) > 4 else word
+    return re.escape(stem) + r"\w*"
+
+
+def match_source_by_text(text: Optional[str]) -> Optional[OlympiadSource]:
+    """Пытается узнать в произвольном тексте (например, названии события,
+    вписанного в календарь вручную) одну из отслеживаемых олимпиад —
+    по совпадению ВСЕХ значимых слов названия (в любом порядке, с учётом
+    падежных окончаний), без учёта регистра.
+
+    Это текстовое совпадение, а не надёжная привязка - может пропустить
+    сильно сокращённое название или (реже) случайно сработать на
+    не связанном тексте. Если подошло несколько источников — берётся тот,
+    у которого совпавшее название длиннее (более специфичное)."""
+    if not text:
+        return None
+
+    best: Optional[OlympiadSource] = None
+    best_score = 0
+    for source in SOURCES:
+        words = _content_words(source.name)
+        if not words:
+            continue
+        # Одно короткое слово (например "НТО", 3 буквы) само по себе слишком
+        # легко случайно встретить в несвязанном тексте - требуем либо
+        # несколько слов, либо одно, но подлиннее.
+        if len(words) == 1 and len(words[0]) < 5:
+            continue
+        if all(
+            re.search(r"(?<!\w)" + _word_stem_pattern(w) + r"(?!\w)", text, re.IGNORECASE)
+            for w in words
+        ):
+            score = sum(len(w) for w in words)
+            if score > best_score:
+                best = source
+                best_score = score
+    return best

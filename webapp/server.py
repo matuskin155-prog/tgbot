@@ -1,5 +1,7 @@
 import asyncio
+import calendar as calendar_module
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -9,9 +11,9 @@ from aiohttp import web
 from bot.config import Settings, load_settings
 from bot.database import Database
 from bot.formatting import format_time_range, is_event_ongoing
-from bot.google_calendar import GoogleCalendarClient
+from bot.google_calendar import CalendarEvent, GoogleCalendarClient
 from bot.olympiad_watch import check_olympiad_sources
-from bot.olympiads import SOURCES
+from bot.olympiads import SOURCES, match_source_by_text
 from bot.runtime_config import ConfigError, Defaults, RuntimeConfig
 
 from .auth import InitDataError, validate_init_data
@@ -71,6 +73,19 @@ async def handle_unsubscribe(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+def _olympiad_url_for(event: CalendarEvent) -> Optional[str]:
+    """Ссылка на сайт олимпиады для карточки события в Mini App - либо
+    записанная ботом при автосоздании события (надёжный путь), либо, если
+    её нет (событие вписано в календарь вручную), распознанная по названию
+    события среди отслеживаемых олимпиад (см. match_source_by_text -
+    текстовое совпадение, не гарантия)."""
+    url = event.extended_properties.get("tgbot_olympiad_url")
+    if url:
+        return url
+    source = match_source_by_text(event.summary)
+    return source.url if source else None
+
+
 async def _events_payload(
     request: web.Request, hours: int, *, exclude_hidden_for: Optional[int] = None
 ) -> list:
@@ -95,7 +110,7 @@ async def _events_payload(
             "all_day": event.all_day,
             "start_ts": event.start.isoformat(),
             "html_link": event.html_link,
-            "olympiad_url": event.extended_properties.get("tgbot_olympiad_url"),
+            "olympiad_url": _olympiad_url_for(event),
         }
         for event in events
     ]
@@ -120,6 +135,27 @@ async def handle_events_upcoming(request: web.Request) -> web.Response:
         )
     except Exception:
         logger.exception("Не удалось получить ближайшие события")
+        raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
+    return web.json_response(events)
+
+
+async def handle_events_month(request: web.Request) -> web.Response:
+    """События с сегодняшнего дня до конца текущего календарного месяца -
+    для блока "Этот месяц" на главном экране (не привязан к LOOKAHEAD_HOURS,
+    у которого горизонт обычно гораздо короче месяца)."""
+    auth = _require_auth(request)
+    runtime: RuntimeConfig = request.app["runtime_config"]
+    tz = ZoneInfo(runtime.timezone)
+    now_local = datetime.now(tz)
+    last_day = calendar_module.monthrange(now_local.year, now_local.month)[1]
+    month_end_local = now_local.replace(
+        day=last_day, hour=23, minute=59, second=59, microsecond=0
+    )
+    hours = max(1, (month_end_local.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds() / 3600)
+    try:
+        events = await _events_payload(request, hours, exclude_hidden_for=auth["chat_id"])
+    except Exception:
+        logger.exception("Не удалось получить события на месяц")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
     return web.json_response(events)
 
@@ -330,6 +366,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/unsubscribe", handle_unsubscribe)
     app.router.add_get("/api/events/today", handle_events_today)
     app.router.add_get("/api/events/upcoming", handle_events_upcoming)
+    app.router.add_get("/api/events/month", handle_events_month)
     app.router.add_get("/api/events/deletable", handle_events_deletable)
     app.router.add_post("/api/events/delete", handle_events_delete)
     app.router.add_post("/api/events/hide", handle_events_hide)
