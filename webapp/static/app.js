@@ -1,15 +1,22 @@
 const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
-if (tg.setHeaderColor) {
-  try { tg.setHeaderColor("secondary_bg_color"); } catch (e) { /* старые клиенты */ }
-}
-
 // У приложения свой фирменный кавайный пастельный вид (не берём цвета из
 // темы собеседника в Telegram) - только переключаем светлый/тёмный вариант
-// вслед за самим Telegram, через data-theme на <html>.
+// вслед за самим Telegram, через data-theme на <html>. Цвета шапки и фона
+// самого Telegram подгоняем под розовую шапку приложения (--header-bg и --bg
+// в app.css), чтобы сверху не было чужой полоски.
+const TG_COLORS = {
+  light: { header: "#ffd3e6", bg: "#fff4f9" },
+  dark: { header: "#4a2a5c", bg: "#22132c" },
+};
 function applyColorScheme() {
-  document.documentElement.dataset.theme = tg.colorScheme === "dark" ? "dark" : "light";
+  const scheme = tg.colorScheme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = scheme;
+  try {
+    if (tg.setHeaderColor) tg.setHeaderColor(TG_COLORS[scheme].header);
+    if (tg.setBackgroundColor) tg.setBackgroundColor(TG_COLORS[scheme].bg);
+  } catch (e) { /* старые клиенты не умеют свои цвета */ }
 }
 applyColorScheme();
 try { tg.onEvent("themeChanged", applyColorScheme); } catch (e) { /* старые клиенты */ }
@@ -181,13 +188,13 @@ function emptyState(emoji, text) {
   return `<div class="empty"><span class="emoji">${emoji}</span>${text}</div>`;
 }
 
-function renderEventList(events, { emptyEmoji = "🎉", emptyText = "Событий нет", tappable = false, showDelete = false, showHide = false } = {}) {
+function renderEventList(events, { emptyEmoji = "🌸", emptyText = "Событий нет", tappable = false, showDelete = false, showHide = false } = {}) {
   if (!events.length) return emptyState(emptyEmoji, emptyText);
   return events.map((e, i) => eventCard(e, { tappable, index: i, showDelete, showHide })).join("");
 }
 
 function renderGroupedByDate(events, { showDelete = false, showHide = false } = {}) {
-  if (!events.length) return emptyState("🎉", "Событий нет");
+  if (!events.length) return emptyState("🌸", "Событий нет");
   let html = "";
   let lastDate = null;
   events.forEach((e, i) => {
@@ -274,7 +281,7 @@ async function showToday() {
     const [events, monthBlock] = await Promise.all([api("/api/events/today"), fetchMonthSummary()]);
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
     content.innerHTML = monthBlock + subBtn + renderEventList(events, {
-      emptyEmoji: "🎉", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin, showHide: true,
+      emptyEmoji: "🌸", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin, showHide: true,
     });
     bindCardActions(showToday);
   } catch (e) {

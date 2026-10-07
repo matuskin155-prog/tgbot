@@ -3,11 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#ffd3e6" />
 <title>Календарь</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<!-- Nunito и Pacifico содержат кириллицу (у Quicksand её нет) -->
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Pacifico&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
@@ -24,10 +26,10 @@
     </div>
   </main>
   <nav class="tabbar">
-    <button class="tab-btn active" data-tab="today"><span class="ic">📅</span><span>Сегодня</span></button>
-    <button class="tab-btn" data-tab="upcoming"><span class="ic">📆</span><span>Ближайшие</span></button>
-    <button class="tab-btn" data-tab="olympiads"><span class="ic">🏆</span><span>Олимпиады</span></button>
-    <button class="tab-btn" data-tab="settings"><span class="ic">⚙️</span><span>Ещё</span></button>
+    <button class="tab-btn active" data-tab="today"><span class="ic">🎀</span><span>Сегодня</span></button>
+    <button class="tab-btn" data-tab="upcoming"><span class="ic">💌</span><span>Ближайшие</span></button>
+    <button class="tab-btn" data-tab="olympiads"><span class="ic">👑</span><span>Олимпиады</span></button>
+    <button class="tab-btn" data-tab="settings"><span class="ic">🧸</span><span>Ещё</span></button>
   </nav>
 </div>
 <script src="/static/app.js"></script>

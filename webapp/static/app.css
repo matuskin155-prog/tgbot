@@ -1,148 +1,248 @@
 * { box-sizing: border-box; }
 
+/* Дизайн «пикми»: дневник-планировщик с клейкой лентой, бантиками и
+   глянцевыми «желейными» кнопками. Светлая и тёмная тема переключаются
+   через data-theme на <html> (см. app.js), цвета темы Telegram не берём. */
 :root {
-  /* Кавайная пастельная палитра - светлый вариант по умолчанию.
-     Это фирменный вид приложения, не берём цвета из темы чата в Telegram -
-     подстраиваемся только под светлый/тёмный режим (см. ниже и app.js). */
-  --bg: #fff6fa;
+  --bg: #fff4f9;
+  --dots: rgba(255, 95, 162, 0.14);
   --card-bg: #ffffff;
-  --sep: #ffd9ea;
-  --text: #5b3a52;
-  --hint: #b896ae;
-  --accent: #ff6fa5;
-  --accent-text: #ffffff;
-  --accent-soft: #ffe1ed;
-  --secondary: #9b8afb;
-  --secondary-soft: #ece6ff;
-  --olympiad: #e08f00;
-  --olympiad-soft: #fff1d6;
-  --live: #f23c74;
-  --live-soft: #ffe1ec;
-  --shadow-color: rgba(255, 111, 165, 0.25);
-  --font-main: "Quicksand", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --outline: #ff9cc8;
+  --sep: #ffc9e0;
+  --text: #4a1f3d;
+  --hint: #8f5f7c;
+  --accent: #ff5fa2;
+  --accent-strong: #c91f69;
+  --accent-soft: #ffe0ee;
+  --jelly-top: #ff7ab5;
+  --jelly-bottom: #e02d79;
+  --secondary: #6a49de;
+  --secondary-soft: #e9e1ff;
+  --olympiad: #a35f00;
+  --olympiad-soft: #fff0b8;
+  --olympiad-edge: #f5b82e;
+  --live: #e0166a;
+  --live-soft: #ffd6e7;
+  --header-bg: #ffd3e6;
+  --pop: #ffc3dd;
+  --glow: rgba(255, 95, 162, 0.45);
+  --title-shadow: #ffffff;
+  --font-main: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: "Pacifico", "Nunito", cursive;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #241a2e;
-    --card-bg: #342742;
-    --sep: #4a3658;
-    --text: #f5e9f7;
-    --hint: #b49bc4;
-    --accent: #ff8fc0;
-    --accent-text: #2b1830;
-    --accent-soft: rgba(255, 143, 192, 0.2);
-    --secondary: #c4b2ff;
-    --secondary-soft: rgba(196, 178, 255, 0.18);
-    --olympiad: #ffc34d;
-    --olympiad-soft: rgba(255, 195, 77, 0.18);
-    --live: #ff6f9c;
-    --live-soft: rgba(255, 111, 156, 0.18);
-    --shadow-color: rgba(0, 0, 0, 0.4);
+    --bg: #22132c;
+    --dots: rgba(255, 140, 192, 0.1);
+    --card-bg: #33203f;
+    --outline: #8b4f9e;
+    --sep: #5b3a6b;
+    --text: #ffe8f4;
+    --hint: #cfa9c4;
+    --accent: #ff8cc0;
+    --accent-strong: #ffb3d6;
+    --accent-soft: rgba(255, 140, 192, 0.18);
+    --jelly-top: #ff86bd;
+    --jelly-bottom: #e0408a;
+    --secondary: #cdbbff;
+    --secondary-soft: rgba(205, 187, 255, 0.16);
+    --olympiad: #ffd36b;
+    --olympiad-soft: rgba(255, 211, 107, 0.16);
+    --olympiad-edge: #e0a62c;
+    --live: #ff5c9a;
+    --live-soft: rgba(255, 92, 154, 0.2);
+    --header-bg: #4a2a5c;
+    --pop: #14081c;
+    --glow: rgba(255, 140, 192, 0.5);
+    --title-shadow: #2a1536;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #241a2e;
-  --card-bg: #342742;
-  --sep: #4a3658;
-  --text: #f5e9f7;
-  --hint: #b49bc4;
-  --accent: #ff8fc0;
-  --accent-text: #2b1830;
-  --accent-soft: rgba(255, 143, 192, 0.2);
-  --secondary: #c4b2ff;
-  --secondary-soft: rgba(196, 178, 255, 0.18);
-  --olympiad: #ffc34d;
-  --olympiad-soft: rgba(255, 195, 77, 0.18);
-  --live: #ff6f9c;
-  --live-soft: rgba(255, 111, 156, 0.18);
-  --shadow-color: rgba(0, 0, 0, 0.4);
+  --bg: #22132c;
+  --dots: rgba(255, 140, 192, 0.1);
+  --card-bg: #33203f;
+  --outline: #8b4f9e;
+  --sep: #5b3a6b;
+  --text: #ffe8f4;
+  --hint: #cfa9c4;
+  --accent: #ff8cc0;
+  --accent-strong: #ffb3d6;
+  --accent-soft: rgba(255, 140, 192, 0.18);
+  --jelly-top: #ff86bd;
+  --jelly-bottom: #e0408a;
+  --secondary: #cdbbff;
+  --secondary-soft: rgba(205, 187, 255, 0.16);
+  --olympiad: #ffd36b;
+  --olympiad-soft: rgba(255, 211, 107, 0.16);
+  --olympiad-edge: #e0a62c;
+  --live: #ff5c9a;
+  --live-soft: rgba(255, 92, 154, 0.2);
+  --header-bg: #4a2a5c;
+  --pop: #14081c;
+  --glow: rgba(255, 140, 192, 0.5);
+  --title-shadow: #2a1536;
 }
 
 body {
   margin: 0;
   font-family: var(--font-main);
-  background: var(--bg);
+  font-weight: 600;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--dots) 1.6px, transparent 1.8px);
+  background-size: 22px 22px;
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+button, input { font-family: var(--font-main); }
+button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--secondary);
+  outline-offset: 3px;
+}
+
+/* --- Шапка: бантик и фестончатый край --- */
 .topbar {
-  padding: 18px 16px 14px;
   position: sticky;
   top: 0;
-  background: linear-gradient(135deg, var(--accent-soft), var(--secondary-soft) 70%);
-  border-bottom: 2px solid var(--sep);
   z-index: 5;
+  padding: 16px 76px 12px 18px;
+  background: var(--header-bg);
+}
+.topbar::before {
+  content: "🎀";
+  position: absolute;
+  right: 16px;
+  top: 8px;
+  font-size: 42px;
+  line-height: 1;
+  transform: rotate(14deg);
+  filter: drop-shadow(0 3px 0 rgba(255, 95, 162, 0.3));
+}
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 12px;
+  background: radial-gradient(circle at 10px 0, var(--header-bg) 9.5px, transparent 10px) 0 0 / 20px 12px repeat-x;
+  pointer-events: none;
 }
 .topbar h1 {
   margin: 0;
-  font-size: 23px;
-  font-weight: 800;
-  letter-spacing: -0.2px;
-  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--accent-strong);
+  text-shadow: 0 2px 0 var(--title-shadow);
+}
+.topbar h1::after {
+  content: "✨";
+  font-size: 15px;
+  margin-left: 6px;
+  display: inline-block;
+  animation: twinkle 3.2s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 1; transform: scale(1) rotate(0); }
+  50% { opacity: 0.55; transform: scale(0.8) rotate(14deg); }
 }
 .subtitle {
-  margin: 4px 0 0;
-  font-size: 13px;
-  font-weight: 600;
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  font-weight: 800;
   color: var(--hint);
-  min-height: 16px;
+  min-height: 18px;
 }
 
-#content { padding: 16px 16px 92px; min-height: 60vh; animation: fade-in 0.18s ease-out; }
+#content { padding: 26px 16px 124px; min-height: 60vh; animation: fade-in 0.18s ease-out; }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* --- Карточка события --- */
+/* --- Карточка события: листок из планера с лентой-васи --- */
 .card {
   position: relative;
   background: var(--card-bg);
-  border: 2px solid var(--sep);
-  border-radius: 20px;
-  padding: 13px 16px 13px 19px;
-  margin-bottom: 11px;
-  overflow: hidden;
+  border: 2px solid var(--outline);
+  border-radius: 22px;
+  padding: 17px 16px 14px;
+  margin-bottom: 20px;
   opacity: 0;
-  box-shadow: 0 3px 10px var(--shadow-color);
-  animation: card-in 0.3s ease-out forwards;
+  box-shadow: 4px 4px 0 var(--pop);
+  animation: card-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   animation-delay: calc(var(--i, 0) * 35ms);
 }
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  from { opacity: 0; transform: scale(0.94); }
   to { opacity: 1; transform: none; }
 }
 .card::before {
   content: "";
   position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 5px;
-  border-radius: 0 4px 4px 0;
-  background: var(--sep);
+  top: -10px;
+  left: 18px;
+  width: 60px;
+  height: 18px;
+  background: repeating-linear-gradient(45deg, rgba(168, 142, 255, 0.8) 0 6px, rgba(255, 255, 255, 0.65) 6px 12px);
+  transform: rotate(-4deg);
+  clip-path: polygon(0 0, 100% 0, 97% 25%, 100% 50%, 97% 75%, 100% 100%, 0 100%, 3% 75%, 0 50%, 3% 25%);
+}
+.card.is-live {
+  border-color: var(--live);
+  background: linear-gradient(160deg, var(--card-bg) 40%, var(--live-soft));
+  animation: card-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, ring 2.4s ease-out 0.6s infinite;
+  animation-delay: calc(var(--i, 0) * 35ms), 0.6s;
+}
+.card.is-live::before {
+  background: repeating-linear-gradient(45deg, rgba(255, 95, 162, 0.85) 0 6px, rgba(255, 255, 255, 0.65) 6px 12px);
+}
+@keyframes ring {
+  0% { box-shadow: 4px 4px 0 var(--pop), 0 0 0 0 var(--glow); }
+  70%, 100% { box-shadow: 4px 4px 0 var(--pop), 0 0 0 10px transparent; }
 }
 .card.is-olympiad {
   background: var(--olympiad-soft);
-  border-color: var(--olympiad);
+  border-color: var(--olympiad-edge);
 }
-.card.is-olympiad::before { background: var(--olympiad); }
-.card.is-live::before { background: var(--live); }
-.card.is-today::before { background: var(--accent); }
+.card.is-olympiad::before {
+  background: repeating-linear-gradient(45deg, rgba(245, 184, 46, 0.9) 0 6px, rgba(255, 255, 255, 0.65) 6px 12px);
+}
+.card.is-olympiad::after {
+  content: "⭐";
+  position: absolute;
+  top: -13px;
+  right: 14px;
+  font-size: 26px;
+  line-height: 1;
+  transform: rotate(14deg);
+}
+.card.is-live::after {
+  content: "🎀";
+  position: absolute;
+  top: -15px;
+  right: 12px;
+  font-size: 32px;
+  line-height: 1;
+  transform: rotate(14deg);
+}
 
 .card .row-top {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
   flex-wrap: wrap;
 }
 .card .time {
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 800;
   color: var(--hint);
 }
 .card.is-live .time { color: var(--live); }
@@ -150,48 +250,44 @@ body {
 .live-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--live);
-  background: var(--live-soft);
-  padding: 3px 8px 3px 7px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #fff;
+  background: var(--live);
+  padding: 3px 10px 3px 8px;
   border-radius: 20px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
 }
 .live-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--live);
+  background: #fff;
   animation: pulse 1.4s ease-in-out infinite;
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.75); }
+  50% { opacity: 0.5; transform: scale(0.7); }
 }
 
 .olympiad-badge {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--olympiad);
-  background: var(--olympiad-soft);
-  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #6b3f00;
+  background: #ffdc7a;
+  padding: 3px 10px;
   border-radius: 20px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
 }
 
-.card .title { font-size: 16px; font-weight: 700; line-height: 1.35; }
+.card .title { font-size: 17px; font-weight: 800; line-height: 1.3; }
 .card .loc {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--hint);
   margin-top: 5px;
-  font-weight: 600;
+  font-weight: 700;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -201,11 +297,11 @@ body {
 .card.tappable:active { transform: scale(0.97); }
 
 .countdown {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--accent-strong);
   background: var(--accent-soft);
-  padding: 3px 8px;
+  padding: 3px 10px;
   border-radius: 20px;
 }
 
@@ -213,99 +309,91 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  margin-top: 9px;
+  gap: 0 11px;
+  margin-top: 8px;
+}
+.card.is-olympiad .row-actions {
+  border-top: 2px dashed var(--olympiad-edge);
+  padding-top: 12px;
+  margin-top: 12px;
 }
 
 .olympiad-link-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12.5px;
-  font-weight: 800;
-  color: #fff;
-  background: var(--olympiad);
-  border: none;
-  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #4a2b00;
+  background: linear-gradient(180deg, #ffd96b, #f5a900);
+  border: 2px solid #d98e00;
+  padding: 6px 14px;
   border-radius: 20px;
   cursor: pointer;
-  box-shadow: 0 2px 8px var(--shadow-color);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 3px 0 #c98400;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
-.olympiad-link-btn:active { opacity: 0.8; transform: scale(0.97); }
+.olympiad-link-btn:active {
+  transform: translateY(3px);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 0 0 #c98400;
+}
 
-.cal-link {
+.cal-link, .delete-btn, .hide-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   font-size: 12px;
-  font-weight: 700;
-  color: var(--secondary);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-.cal-link:active { opacity: 0.6; }
-
-.delete-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--live);
-  background: none;
-  border: none;
-  padding: 0;
-  margin-left: auto;
-  cursor: pointer;
-}
-.delete-btn:active { opacity: 0.6; }
-
-.hide-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--hint);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-.hide-btn:active { opacity: 0.6; }
-
-/* --- Группировка по дате (Ближайшие) --- */
-.date-heading {
-  font-size: 13px;
   font-weight: 800;
-  color: var(--secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin: 20px 0 9px;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 8px 0;
+  cursor: pointer;
 }
-.date-heading:first-child { margin-top: 0; }
+.cal-link { color: var(--secondary); }
+.hide-btn { color: var(--hint); }
+.delete-btn { color: var(--live); margin-left: auto; }
+.cal-link:active, .delete-btn:active, .hide-btn:active { opacity: 0.6; }
+
+/* --- Заголовки секций и дат: рукописные, с пунктирной линией --- */
+.date-heading, .section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--accent-strong);
+  margin: 26px 0 16px;
+}
+.date-heading::after, .section-title::after {
+  content: "";
+  flex: 1;
+  border-top: 2px dotted var(--outline);
+}
+.date-heading:first-child, .section-title:first-child { margin-top: 0; }
 
 /* --- Пустое состояние --- */
 .empty {
   text-align: center;
   color: var(--hint);
-  padding: 56px 16px;
-  font-size: 15px;
-  font-weight: 600;
+  padding: 52px 16px;
+  font-size: 15.5px;
+  font-weight: 800;
   line-height: 1.5;
 }
-.empty .emoji { font-size: 40px; display: block; margin-bottom: 10px; }
+.empty .emoji { font-size: 54px; display: block; margin-bottom: 12px; }
 
 /* --- Скелетон загрузки --- */
 .skeleton-list { padding-top: 2px; }
 .skeleton-card {
-  height: 64px;
-  border-radius: 20px;
-  margin-bottom: 11px;
-  background: linear-gradient(100deg, var(--card-bg) 30%, var(--sep) 50%, var(--card-bg) 70%);
+  height: 76px;
+  border-radius: 22px;
+  margin-bottom: 20px;
+  border: 2px solid var(--outline);
+  background: linear-gradient(100deg, var(--card-bg) 30%, var(--accent-soft) 50%, var(--card-bg) 70%);
   background-size: 200% 100%;
+  box-shadow: 4px 4px 0 var(--pop);
   animation: shimmer 1.3s ease-in-out infinite;
 }
 @keyframes shimmer {
@@ -313,107 +401,152 @@ body {
   100% { background-position: -50% 0; }
 }
 
-/* --- Кнопки --- */
+/* --- Кнопки: глянцевое «желе» --- */
 .btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   width: 100%;
-  padding: 14px;
-  border: none;
+  padding: 14px 16px;
+  border: 2px solid #c91f69;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-family: var(--font-main);
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 11px;
+  background: linear-gradient(180deg, var(--jelly-top), var(--jelly-bottom));
+  color: #fff;
+  font-size: 15.5px;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(120, 0, 60, 0.4);
+  margin-bottom: 22px;
   cursor: pointer;
-  box-shadow: 0 4px 14px var(--shadow-color);
-  transition: opacity 0.1s ease, transform 0.08s ease;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -4px 0 rgba(120, 0, 60, 0.16),
+    0 5px 0 #b01a5c,
+    0 9px 16px var(--glow);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
-.btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.55; box-shadow: none; }
+.btn::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 4px;
+  height: 36%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.btn:active {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -4px 0 rgba(120, 0, 60, 0.16),
+    0 1px 0 #b01a5c,
+    0 3px 6px var(--glow);
+}
+.btn:disabled { opacity: 0.6; transform: translateY(4px); box-shadow: 0 1px 0 #b01a5c; }
 .btn.secondary {
-  background: var(--secondary-soft);
-  color: var(--secondary);
-  box-shadow: none;
+  background: linear-gradient(180deg, #f3edff, #d9ccff);
+  border-color: #a58cff;
+  color: #3f27a8;
+  text-shadow: none;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -4px 0 rgba(106, 73, 222, 0.12),
+    0 5px 0 #a58cff,
+    0 9px 16px rgba(165, 140, 255, 0.4);
 }
-.btn.danger { background: var(--live); color: #fff; }
-.btn.small { padding: 10px; font-size: 13.5px; margin-bottom: 0; }
-
-/* --- Секции настроек --- */
-.section-title {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin: 22px 0 9px;
+.btn.secondary:active {
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.7), 0 1px 0 #a58cff, 0 3px 6px rgba(165, 140, 255, 0.4);
 }
-.section-title:first-child { margin-top: 2px; }
+.btn.danger {
+  background: linear-gradient(180deg, #ff7f98, #e0364f);
+  border-color: #b3213a;
+  box-shadow:
+    inset 0 3px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -4px 0 rgba(100, 0, 20, 0.16),
+    0 5px 0 #9d1c33,
+    0 9px 16px rgba(224, 54, 79, 0.35);
+}
+.btn.danger:active { box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.5), 0 1px 0 #9d1c33; }
+.btn.small { padding: 10px 14px; font-size: 14px; margin-bottom: 8px; }
 
-.field { margin-bottom: 13px; }
-.field label { display: block; font-size: 13px; font-weight: 700; color: var(--hint); margin-bottom: 5px; }
-.field .hint { font-size: 11.5px; color: var(--hint); margin-top: 4px; }
+/* --- Поля настроек --- */
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13.5px; font-weight: 800; color: var(--hint); margin-bottom: 6px; }
+.field .hint { font-size: 12.5px; font-weight: 700; color: var(--hint); margin-top: 5px; }
 .field input {
   width: 100%;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 2px solid var(--sep);
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 2px solid var(--outline);
   background: var(--card-bg);
   color: var(--text);
-  font-family: var(--font-main);
-  font-size: 15px;
-  font-weight: 600;
-  transition: border-color 0.12s ease;
+  font-size: 16px;
+  font-weight: 700;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.field input:focus { outline: none; border-color: var(--accent); }
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 3px 3px 0 var(--pop);
+}
 
 .info-card {
   background: var(--card-bg);
-  border: 2px solid var(--sep);
-  border-radius: 20px;
-  padding: 15px 17px;
-  margin-bottom: 13px;
+  border: 2px solid var(--outline);
+  border-radius: 22px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  box-shadow: 4px 4px 0 var(--pop);
 }
-.info-card .title { font-size: 16px; font-weight: 700; }
-.info-card .loc { font-size: 13px; font-weight: 600; color: var(--hint); margin-top: 4px; }
+.info-card .title { font-size: 17px; font-weight: 800; }
+.info-card .loc { font-size: 13.5px; font-weight: 700; color: var(--hint); margin-top: 5px; }
 
-/* --- Блок "Этот месяц" --- */
+/* --- «Этот месяц»: лоскутная нашивка со стежками --- */
 .month-card {
-  background: linear-gradient(160deg, var(--card-bg), var(--accent-soft) 160%);
-  border: 2px solid var(--sep);
-  border-radius: 20px;
-  padding: 15px 17px 17px;
-  margin-bottom: 13px;
+  position: relative;
+  background: linear-gradient(160deg, var(--card-bg) 30%, var(--accent-soft));
+  border: 2px solid var(--outline);
+  border-radius: 26px;
+  padding: 18px 20px 16px;
+  margin-bottom: 24px;
+  box-shadow: 4px 4px 0 var(--pop);
+}
+.month-card::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 2px dashed var(--outline);
+  border-radius: 21px;
+  opacity: 0.7;
+  pointer-events: none;
 }
 .month-header {
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 13px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--accent-strong);
+  margin-bottom: 12px;
 }
 .month-stats {
   display: flex;
-  gap: 28px;
-  margin-bottom: 15px;
+  gap: 30px;
+  margin-bottom: 16px;
 }
 .month-stat-num {
-  font-size: 30px;
-  font-weight: 800;
+  font-size: 36px;
+  font-weight: 900;
   line-height: 1;
   color: var(--accent);
 }
 .month-stat.olympiad .month-stat-num { color: var(--olympiad); }
 .month-stat-label {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 800;
   color: var(--hint);
-  margin-top: 4px;
+  margin-top: 5px;
 }
 .month-bars {
   display: flex;
@@ -427,7 +560,7 @@ body {
   align-items: center;
 }
 .month-bar-track {
-  height: 34px;
+  height: 38px;
   width: 100%;
   display: flex;
   align-items: flex-end;
@@ -435,20 +568,20 @@ body {
 }
 .month-bar {
   width: 100%;
-  max-width: 26px;
-  min-height: 3px;
-  border-radius: 6px 6px 2px 2px;
-  background: var(--accent);
+  max-width: 28px;
+  min-height: 4px;
+  border-radius: 10px 10px 4px 4px;
+  background: linear-gradient(180deg, #ff8cc0, var(--accent));
 }
 .month-bar-count {
-  font-size: 10.5px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 800;
   color: var(--hint);
   margin-top: 5px;
 }
 .month-bars-hint {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--hint);
   text-align: center;
   margin-top: 3px;
@@ -459,64 +592,70 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 10px;
   border-radius: 20px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
   margin-left: 6px;
   vertical-align: middle;
 }
-.badge.new { color: var(--live); background: var(--live-soft); }
+.badge.new { color: #fff; background: var(--live); }
 .olympiad-link {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--hint);
-  margin-top: 4px;
+  margin-top: 5px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-/* --- Нижняя навигация --- */
+/* --- Нижняя навигация: плавающая «таблетка» --- */
 .tabbar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 10;
   display: flex;
+  padding: 6px;
   background: var(--card-bg);
-  border-top: 2px solid var(--sep);
-  padding-bottom: env(safe-area-inset-bottom);
+  border: 2px solid var(--outline);
+  border-radius: 32px;
+  box-shadow: 4px 4px 0 var(--pop), 0 10px 24px var(--glow);
 }
 .tab-btn {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 9px 0 7px;
+  gap: 2px;
+  padding: 6px 0 5px;
   background: none;
   border: none;
   color: var(--hint);
-  font-family: var(--font-main);
   transition: color 0.1s ease, transform 0.08s ease;
 }
-.tab-btn:active { transform: scale(0.9); }
+.tab-btn:active { transform: scale(0.92); }
 .tab-btn .ic {
-  font-size: 18px;
-  width: 36px;
-  height: 24px;
+  font-size: 20px;
+  width: 46px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s ease;
 }
 .tab-btn.active .ic {
-  background: var(--accent-soft);
-  transform: scale(1.08);
+  background: linear-gradient(180deg, var(--jelly-top), var(--jelly-bottom));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 3px 0 #b01a5c;
+  transform: translateY(-3px) scale(1.06);
 }
-.tab-btn span:last-child { font-size: 11px; font-weight: 700; }
-.tab-btn.active { color: var(--accent); }
+.tab-btn span:last-child { font-size: 11.5px; font-weight: 900; }
+.tab-btn.active { color: var(--accent-strong); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .card { opacity: 1; }
+}
