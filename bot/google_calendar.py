@@ -54,6 +54,15 @@ class GoogleCalendarClient:
         end_of_day = start_of_day + timedelta(days=1)
         return self._list_events(start_of_day, end_of_day, calendar_id)
 
+    def get_events_in_range(
+        self, time_min: datetime, time_max: datetime, calendar_id: str
+    ) -> List[CalendarEvent]:
+        """Все события в произвольном явном диапазоне - используется
+        интерактивным календарём в Mini App для показа любого месяца
+        (вперёд/назад от текущего), в отличие от get_upcoming_events
+        (всегда строго "от сейчас на N часов вперёд")."""
+        return self._list_events(time_min, time_max, calendar_id)
+
     def get_event(self, event_id: str, calendar_id: str) -> CalendarEvent:
         with self._lock:
             item = self._service.events().get(calendarId=calendar_id, eventId=event_id).execute()

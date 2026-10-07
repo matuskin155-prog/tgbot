@@ -304,18 +304,178 @@ function pluralEvents(n) {
   return "событий";
 }
 
-async function showUpcoming() {
-  titleEl.textContent = "Ближайшие события";
-  setSubtitle("");
-  content.innerHTML = skeleton(3);
-  try {
-    const events = await api("/api/events/upcoming");
-    setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
-    content.innerHTML = renderGroupedByDate(events, { showDelete: STATE.is_admin, showHide: true });
-    bindCardActions(showUpcoming);
-  } catch (e) {
-    content.innerHTML = emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
+// --- Интерактивный календарь (вкладка "Календарь") ---
+// Вместо плоского списка "ближайших событий" - помесячная сетка дней с
+// точками-индикаторами (золотая - олимпиада, сиреневая - обычное событие),
+// по которой можно листать вперёд/назад и тапать день, чтобы увидеть его
+// события снизу (те же карточки, что и в остальном приложении).
+
+const MONTHS_NOM = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+let calendarState = null; // { year, month, events, selectedDate, today }
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function ymKey(year, month) {
+  return `${year}-${pad2(month)}`;
+}
+
+// Сетка из 42 дней (6 недель), начиная с понедельника той недели, в которую
+// попадает 1-е число - дни соседних месяцев показываются приглушённо, но
+// тоже кликабельны (тап переключает на тот месяц). Если последняя неделя
+// целиком из чужого месяца - обрезаем её, чтобы сетка была компактнее.
+function buildMonthGrid(year, month, events, todayStr) {
+  const firstOfMonth = new Date(year, month - 1, 1);
+  const startOffset = (firstOfMonth.getDay() + 6) % 7;
+  const gridStart = new Date(year, month - 1, 1 - startOffset);
+
+  const eventsByDate = {};
+  for (const e of events) {
+    (eventsByDate[e.date] = eventsByDate[e.date] || []).push(e);
   }
+
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    const dayEvents = eventsByDate[dateStr] || [];
+    cells.push({
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+      dateStr,
+      inMonth: d.getMonth() + 1 === month && d.getFullYear() === year,
+      isToday: dateStr === todayStr,
+      hasOlympiad: dayEvents.some((e) => e.olympiad_url),
+      hasOther: dayEvents.some((e) => !e.olympiad_url),
+    });
+  }
+  if (cells.slice(35).every((c) => !c.inMonth)) cells.length = 35;
+  return cells;
+}
+
+function renderCalendarHeader(year, month) {
+  return `
+    <div class="cal-nav">
+      <button type="button" class="cal-nav-btn" id="cal-prev" aria-label="Предыдущий месяц">‹</button>
+      <div class="cal-nav-title">${MONTHS_NOM[month - 1]} ${year}</div>
+      <button type="button" class="cal-nav-btn" id="cal-next" aria-label="Следующий месяц">›</button>
+    </div>
+  `;
+}
+
+function renderCalendarGrid(cells, selectedDate) {
+  const head = WEEKDAYS_SHORT.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
+  const days = cells.map((c) => {
+    const classes = ["cal-day"];
+    if (!c.inMonth) classes.push("is-outside");
+    if (c.isToday) classes.push("is-today");
+    if (c.dateStr === selectedDate) classes.push("is-selected");
+    const dots = `${c.hasOlympiad ? '<span class="cal-dot olympiad"></span>' : ""}${c.hasOther ? '<span class="cal-dot"></span>' : ""}`;
+    return `<button type="button" class="${classes.join(" ")}" data-date="${c.dateStr}">
+      <span class="cal-day-num">${c.day}</span>
+      <span class="cal-dots">${dots}</span>
+    </button>`;
+  }).join("");
+  return `
+    <div class="cal-grid">
+      <div class="cal-weekdays">${head}</div>
+      <div class="cal-days">${days}</div>
+    </div>
+    <div class="cal-legend"><span class="cal-dot olympiad"></span> олимпиада &nbsp;&nbsp; <span class="cal-dot"></span> другое событие</div>
+  `;
+}
+
+function dayDetailEvents(events, dateStr) {
+  return events.filter((e) => e.date === dateStr);
+}
+
+async function showCalendar() {
+  titleEl.textContent = "Календарь";
+  if (!calendarState) {
+    const now = new Date();
+    calendarState = { year: now.getFullYear(), month: now.getMonth() + 1, events: [], selectedDate: null, today: null };
+  }
+  await loadCalendarMonth();
+}
+
+async function loadCalendarMonth() {
+  const { year, month } = calendarState;
+  setSubtitle("");
+  content.innerHTML = renderCalendarHeader(year, month) + skeleton(3);
+  bindCalendarNav();
+  try {
+    const data = await api(`/api/events/calendar?year=${year}&month=${month}`);
+    calendarState.events = data.events;
+    calendarState.today = data.today;
+    const inThisMonth = calendarState.selectedDate && calendarState.selectedDate.slice(0, 7) === ymKey(year, month);
+    if (!inThisMonth) {
+      calendarState.selectedDate = data.today && data.today.slice(0, 7) === ymKey(year, month)
+        ? data.today
+        : `${ymKey(year, month)}-01`;
+    }
+    renderCalendarView();
+  } catch (e) {
+    content.innerHTML = renderCalendarHeader(year, month) + emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
+    bindCalendarNav();
+  }
+}
+
+function renderCalendarView() {
+  const { year, month, events, selectedDate, today } = calendarState;
+  const cells = buildMonthGrid(year, month, events, today);
+  const dayEvents = dayDetailEvents(events, selectedDate);
+  const olympiadTotal = events.filter((e) => e.olympiad_url).length;
+  setSubtitle(`${events.length} ${pluralEvents(events.length)} за месяц` + (olympiadTotal ? ` · ${olympiadTotal} олимпиад` : ""));
+
+  content.innerHTML =
+    renderCalendarHeader(year, month) +
+    renderCalendarGrid(cells, selectedDate) +
+    `<div class="cal-day-detail">
+      <div class="date-heading">${dateHeading(selectedDate)}</div>
+      ${renderEventList(dayEvents, { emptyEmoji: "🌸", emptyText: "Событий нет", showDelete: STATE.is_admin, showHide: true })}
+    </div>`;
+
+  bindCalendarNav();
+  content.querySelectorAll(".cal-day").forEach((btn) => {
+    btn.onclick = () => {
+      haptic("light");
+      const d = btn.dataset.date;
+      const [y, m] = d.split("-").map(Number);
+      if (y !== calendarState.year || m !== calendarState.month) {
+        calendarState.year = y;
+        calendarState.month = m;
+        calendarState.selectedDate = d;
+        loadCalendarMonth();
+      } else {
+        calendarState.selectedDate = d;
+        renderCalendarView();
+      }
+    };
+  });
+  bindCardActions(loadCalendarMonth);
+}
+
+function bindCalendarNav() {
+  const prev = document.getElementById("cal-prev");
+  const next = document.getElementById("cal-next");
+  if (prev) prev.onclick = () => { haptic("light"); shiftCalendarMonth(-1); };
+  if (next) next.onclick = () => { haptic("light"); shiftCalendarMonth(1); };
+}
+
+function shiftCalendarMonth(delta) {
+  let { year, month } = calendarState;
+  month += delta;
+  if (month < 1) { month = 12; year -= 1; }
+  if (month > 12) { month = 1; year += 1; }
+  calendarState.year = year;
+  calendarState.month = month;
+  calendarState.selectedDate = null;
+  loadCalendarMonth();
 }
 
 async function showOlympiads() {
@@ -531,7 +691,7 @@ function confirmDelete(eventId, summary, onDone) {
   });
 }
 
-const TABS = { today: showToday, upcoming: showUpcoming, olympiads: showOlympiads, settings: showSettings };
+const TABS = { today: showToday, calendar: showCalendar, olympiads: showOlympiads, settings: showSettings };
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.onclick = () => {

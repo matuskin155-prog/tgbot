@@ -1,9 +1,9 @@
 import asyncio
 import calendar as calendar_module
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from aiohttp import web
@@ -86,12 +86,13 @@ def _olympiad_url_for(event: CalendarEvent) -> Optional[str]:
     return source.url if source else None
 
 
-async def _events_payload(
-    request: web.Request, hours: int, *, exclude_hidden_for: Optional[int] = None
+def _serialize_events(
+    request: web.Request,
+    events: List[CalendarEvent],
+    *,
+    exclude_hidden_for: Optional[int] = None,
 ) -> list:
-    calendar: GoogleCalendarClient = request.app["calendar"]
     runtime: RuntimeConfig = request.app["runtime_config"]
-    events = await asyncio.to_thread(calendar.get_upcoming_events, hours, runtime.calendar_id)
     tz = ZoneInfo(runtime.timezone)
 
     if exclude_hidden_for is not None:
@@ -114,6 +115,15 @@ async def _events_payload(
         }
         for event in events
     ]
+
+
+async def _events_payload(
+    request: web.Request, hours: int, *, exclude_hidden_for: Optional[int] = None
+) -> list:
+    calendar: GoogleCalendarClient = request.app["calendar"]
+    runtime: RuntimeConfig = request.app["runtime_config"]
+    events = await asyncio.to_thread(calendar.get_upcoming_events, hours, runtime.calendar_id)
+    return _serialize_events(request, events, exclude_hidden_for=exclude_hidden_for)
 
 
 async def handle_events_today(request: web.Request) -> web.Response:
@@ -158,6 +168,42 @@ async def handle_events_month(request: web.Request) -> web.Response:
         logger.exception("Не удалось получить события на месяц")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
     return web.json_response(events)
+
+
+async def handle_events_calendar(request: web.Request) -> web.Response:
+    """События произвольного календарного месяца (год/месяц в query) - для
+    интерактивного календаря во вкладке "Календарь". В отличие от
+    /api/events/month (с сегодня и до конца ТЕКУЩЕГО месяца), тут можно
+    запросить любой месяц вперёд/назад для навигации по календарю."""
+    auth = _require_auth(request)
+    runtime: RuntimeConfig = request.app["runtime_config"]
+    tz = ZoneInfo(runtime.timezone)
+    now_local = datetime.now(tz)
+
+    try:
+        year = int(request.query.get("year", now_local.year))
+        month = int(request.query.get("month", now_local.month))
+        start_local = datetime(year, month, 1, tzinfo=tz)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="Некорректные year/month") from exc
+
+    last_day = calendar_module.monthrange(year, month)[1]
+    end_local = start_local.replace(day=last_day) + timedelta(days=1)
+
+    calendar_client: GoogleCalendarClient = request.app["calendar"]
+    try:
+        events = await asyncio.to_thread(
+            calendar_client.get_events_in_range,
+            start_local.astimezone(timezone.utc),
+            end_local.astimezone(timezone.utc),
+            runtime.calendar_id,
+        )
+        payload = _serialize_events(request, events, exclude_hidden_for=auth["chat_id"])
+    except Exception:
+        logger.exception("Не удалось получить события календаря за %s-%s", year, month)
+        raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
+
+    return web.json_response({"year": year, "month": month, "today": now_local.date().isoformat(), "events": payload})
 
 
 async def handle_events_deletable(request: web.Request) -> web.Response:
@@ -367,6 +413,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/events/today", handle_events_today)
     app.router.add_get("/api/events/upcoming", handle_events_upcoming)
     app.router.add_get("/api/events/month", handle_events_month)
+    app.router.add_get("/api/events/calendar", handle_events_calendar)
     app.router.add_get("/api/events/deletable", handle_events_deletable)
     app.router.add_post("/api/events/delete", handle_events_delete)
     app.router.add_post("/api/events/hide", handle_events_hide)
