@@ -419,6 +419,7 @@ button:focus-visible, a:focus-visible {
   text-shadow: 0 1px 0 rgba(120, 0, 60, 0.4);
   margin-bottom: 22px;
   cursor: pointer;
+  overflow: hidden;
   box-shadow:
     inset 0 3px 0 rgba(255, 255, 255, 0.55),
     inset 0 -4px 0 rgba(120, 0, 60, 0.16),
@@ -437,6 +438,21 @@ button:focus-visible, a:focus-visible {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
   pointer-events: none;
 }
+.btn::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -60%; bottom: 0;
+  width: 35%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  transform: skewX(-20deg);
+  animation: shine-sweep 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes shine-sweep {
+  0% { left: -60%; }
+  45%, 100% { left: 130%; }
+}
+.btn:disabled::after { display: none; }
 .btn:active {
   transform: translateY(4px);
   box-shadow:
@@ -540,8 +556,18 @@ button:focus-visible, a:focus-visible {
   font-weight: 900;
   line-height: 1;
   color: var(--accent);
+  background: linear-gradient(120deg, var(--accent), var(--secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
-.month-stat.olympiad .month-stat-num { color: var(--olympiad); }
+.month-stat.olympiad .month-stat-num {
+  color: var(--olympiad);
+  background: linear-gradient(120deg, var(--olympiad), var(--olympiad-edge));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .month-stat-label {
   font-size: 12.5px;
   font-weight: 800;
