@@ -12,6 +12,14 @@ class OlympiadSource:
     # которым тоже нужно узнавать олимпиаду в вручную вписанных событиях -
     # например, встреченная опечатка "Бельченок" вместо "Бельчонок".
     aliases: Tuple[str, ...] = field(default_factory=tuple)
+    # False - олимпиаду больше не нужно автоматически проверять (парсить
+    # сайт, следить за новыми датами) и не нужно показывать в списке
+    # отслеживаемых, но события по ней всё ещё нужно УЗНАВАТЬ в календаре
+    # (match_source_by_text ниже смотрит на весь SOURCES, а не только на
+    # отслеживаемые) - например, Иннагрика: биологическая олимпиада, по
+    # явному выбору больше не парсится, но уже вписанные/будущие вручную
+    # события по ней по-прежнему должны помечаться как олимпиада.
+    auto_check: bool = True
 
 
 SOURCES: List[OlympiadSource] = [
@@ -19,6 +27,9 @@ SOURCES: List[OlympiadSource] = [
     OlympiadSource("izumrud", "Изумруд", "https://dovuz.urfu.ru/olymps/izumrud/registration"),
     OlympiadSource("vsesib", "Всесибирская олимпиада", "https://sesc.nsu.ru/olymp-vsesib/stages/"),
     OlympiadSource("nto", "НТО", "https://ntcontest.ru/"),
+    OlympiadSource(
+        "innagrika", "Иннагрика", "https://innagrika.ru/", auto_check=False
+    ),
     OlympiadSource(
         "sechenovskaya",
         "Сеченовская олимпиада",
@@ -59,6 +70,14 @@ SOURCES: List[OlympiadSource] = [
         aliases=("Бельченок",),  # встреченная опечатка в вручную вписанном событии
     ),
 ]
+
+# Только те олимпиады, чьи сайты бот реально парсит/перепроверяет и
+# показывает в списке отслеживаемых - используется везде, где речь о
+# самой ПРОВЕРКЕ (автоматической или по кнопке), в отличие от SOURCES
+# целиком, который нужен ещё и для узнавания olimpiad по названию события
+# (match_source_by_text ниже) - это не одно и то же: олимпиаду можно
+# перестать проверять, но всё ещё узнавать по названию.
+TRACKED_SOURCES: List[OlympiadSource] = [s for s in SOURCES if s.auto_check]
 
 
 _STOPWORDS = {"им", "по", "и", "для", "на", "в", "с", "из"}

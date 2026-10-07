@@ -13,7 +13,7 @@ from bot.database import Database
 from bot.formatting import format_time_range, is_event_ongoing
 from bot.google_calendar import CalendarEvent, GoogleCalendarClient
 from bot.olympiad_watch import check_olympiad_sources
-from bot.olympiads import SOURCES, match_source_by_text
+from bot.olympiads import TRACKED_SOURCES, match_source_by_text
 from bot.runtime_config import ConfigError, Defaults, RuntimeConfig
 
 from .auth import InitDataError, validate_init_data
@@ -344,7 +344,7 @@ async def handle_olympiads(request: web.Request) -> web.Response:
     _require_auth(request)
     db: Database = request.app["db"]
     result = []
-    for source in SOURCES:
+    for source in TRACKED_SOURCES:
         state = db.get_olympiad_state(source.key)
         result.append(
             {

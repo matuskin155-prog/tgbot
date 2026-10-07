@@ -13,7 +13,7 @@ from .digest import send_daily_digest
 from .formatting import format_event_line, format_time_range
 from .google_calendar import GoogleCalendarClient
 from .olympiad_watch import check_olympiad_sources
-from .olympiads import SOURCES
+from .olympiads import TRACKED_SOURCES
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
 
@@ -572,7 +572,7 @@ async def handle_unhide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db: Database = context.bot_data["db"]
     lines = ["<b>Отслеживаемые олимпиады:</b>"]
-    for source in SOURCES:
+    for source in TRACKED_SOURCES:
         state = db.get_olympiad_state(source.key)
         marker = " 🔔" if state and state[1] else ""
         lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>{marker}')
@@ -591,7 +591,7 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
     calendar: GoogleCalendarClient = context.bot_data["calendar"]
     runtime: RuntimeConfig = context.bot_data["runtime_config"]
     await update.effective_message.reply_text(
-        f"Проверяю {len(SOURCES)} страниц через браузер, это может занять минуту..."
+        f"Проверяю {len(TRACKED_SOURCES)} страниц через браузер, это может занять минуту..."
     )
 
     try:

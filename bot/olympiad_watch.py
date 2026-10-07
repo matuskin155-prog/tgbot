@@ -18,7 +18,7 @@ from telegram.ext import ContextTypes
 from .database import Database
 from .google_calendar import GoogleCalendarClient
 from .olympiad_dates import extract_candidate_dates
-from .olympiads import SOURCES, OlympiadSource
+from .olympiads import TRACKED_SOURCES, OlympiadSource
 
 logger = logging.getLogger(__name__)
 
@@ -154,12 +154,12 @@ def _check_all_sync(
     # сайты олимпиад.
     today_iso = date.today().isoformat()
     sources_to_check = [
-        s for s in SOURCES if not db.has_upcoming_olympiad_event(s.key, today_iso)
+        s for s in TRACKED_SOURCES if not db.has_upcoming_olympiad_event(s.key, today_iso)
     ]
-    if len(sources_to_check) < len(SOURCES):
+    if len(sources_to_check) < len(TRACKED_SOURCES):
         logger.info(
             "Пропускаю %s олимпиад(ы) - для них уже есть будущие даты в календаре",
-            len(SOURCES) - len(sources_to_check),
+            len(TRACKED_SOURCES) - len(sources_to_check),
         )
     if not sources_to_check:
         return _CheckResult(changed, added_events)
