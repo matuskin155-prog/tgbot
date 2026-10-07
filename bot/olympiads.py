@@ -1,6 +1,6 @@
 import re
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -8,6 +8,10 @@ class OlympiadSource:
     key: str
     name: str
     url: str
+    # Дополнительные варианты названия (опечатки, короткие формы), по
+    # которым тоже нужно узнавать олимпиаду в вручную вписанных событиях -
+    # например, встреченная опечатка "Бельченок" вместо "Бельчонок".
+    aliases: Tuple[str, ...] = field(default_factory=tuple)
 
 
 SOURCES: List[OlympiadSource] = [
@@ -50,11 +54,20 @@ SOURCES: List[OlympiadSource] = [
         "http://olymp.academtalant.ru/chemspb",
     ),
     OlympiadSource("turlom", "Турнир Ломоносова", "http://турлом.цпм.рф/"),
-    OlympiadSource("belchonok", "Бельчонок", "http://dovuz.sfu-kras.ru/belchonok"),
+    OlympiadSource(
+        "belchonok", "Бельчонок", "http://dovuz.sfu-kras.ru/belchonok",
+        aliases=("Бельченок",),  # встреченная опечатка в вручную вписанном событии
+    ),
 ]
 
 
 _STOPWORDS = {"им", "по", "и", "для", "на", "в", "с", "из"}
+# "Олимпиада" само по себе ничего не различает - оно есть в названии почти
+# каждого источника, а в коротком вручную вписанном событии ("Регистрация
+# "Сеченовская"") его естественно опускают, раз и так понятно, что речь об
+# олимпиаде. Требовать его наравне с остальными словами только мешает -
+# убираем из сравнения (но оставляем остальные слова обязательными).
+_GENERIC_WORDS = {"олимпиада", "олимпиады", "олимпиаду", "олимпиад", "олимпиаде", "олимпиадой"}
 
 
 def _content_words(name: str) -> List[str]:
@@ -62,7 +75,11 @@ def _content_words(name: str) -> List[str]:
     # выкидываем служебные слова и инициалы — остаются только значимые слова,
     # по которым и будем сравнивать.
     cleaned = re.sub(r"[«»\"().,]", " ", name)
-    return [w for w in cleaned.split() if len(w) > 2 and w.lower() not in _STOPWORDS]
+    words = [w for w in cleaned.split() if len(w) > 2 and w.lower() not in _STOPWORDS]
+    # "Олимпиада" убираем, только если в названии есть другие значимые
+    # слова - если это ВСЁ название целиком, фильтровать нечем.
+    without_generic = [w for w in words if w.lower() not in _GENERIC_WORDS]
+    return without_generic or words
 
 
 def _word_stem_pattern(word: str) -> str:
@@ -89,25 +106,27 @@ def match_source_by_text(text: Optional[str]) -> Optional[OlympiadSource]:
     best: Optional[OlympiadSource] = None
     best_score = 0
     for source in SOURCES:
-        words = _content_words(source.name)
-        if not words:
-            continue
-        # Одно короткое слово само по себе слишком легко случайно встретить
-        # в несвязанном тексте - требуем либо несколько слов, либо одно, но
-        # подлиннее. Исключение - аббревиатуры ЗАГЛАВНЫМИ буквами (НТО, МОШ):
-        # случайно совпасть с обычным русским словом им намного сложнее, а
-        # без этого исключения такие олимпиады не распознавались бы вообще
-        # никогда, даже если в тексте написано прямо "НТО".
-        if len(words) == 1 and len(words[0]) < 5 and not (
-            len(words[0]) >= 3 and words[0].isupper()
-        ):
-            continue
-        if all(
-            re.search(r"(?<!\w)" + _word_stem_pattern(w) + r"(?!\w)", text, re.IGNORECASE)
-            for w in words
-        ):
-            score = sum(len(w) for w in words)
-            if score > best_score:
-                best = source
-                best_score = score
+        for name in (source.name, *source.aliases):
+            words = _content_words(name)
+            if not words:
+                continue
+            # Одно короткое слово само по себе слишком легко случайно
+            # встретить в несвязанном тексте - требуем либо несколько слов,
+            # либо одно, но подлиннее. Исключение - аббревиатуры ЗАГЛАВНЫМИ
+            # буквами (НТО, МОШ): случайно совпасть с обычным русским словом
+            # им намного сложнее, а без этого исключения такие олимпиады не
+            # распознавались бы вообще никогда, даже если в тексте написано
+            # прямо "НТО".
+            if len(words) == 1 and len(words[0]) < 5 and not (
+                len(words[0]) >= 3 and words[0].isupper()
+            ):
+                continue
+            if all(
+                re.search(r"(?<!\w)" + _word_stem_pattern(w) + r"(?!\w)", text, re.IGNORECASE)
+                for w in words
+            ):
+                score = sum(len(w) for w in words)
+                if score > best_score:
+                    best = source
+                    best_score = score
     return best
