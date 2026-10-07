@@ -15,7 +15,6 @@ SOURCES: List[OlympiadSource] = [
     OlympiadSource("izumrud", "Изумруд", "https://dovuz.urfu.ru/olymps/izumrud/registration"),
     OlympiadSource("vsesib", "Всесибирская олимпиада", "https://sesc.nsu.ru/olymp-vsesib/stages/"),
     OlympiadSource("nto", "НТО", "https://ntcontest.ru/"),
-    OlympiadSource("innagrika", "Иннагрика", "https://innagrika.ru/"),
     OlympiadSource(
         "sechenovskaya",
         "Сеченовская олимпиада",
