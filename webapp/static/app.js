@@ -71,7 +71,9 @@ function dateHeading(isoDate) {
 
 function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
+  const olympiadClass = e.olympiad_url ? "is-olympiad" : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
+  const olympiadBadge = e.olympiad_url ? '<span class="olympiad-badge">🏅 олимпиада</span>' : "";
   const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
   const countdownBadge = countdown
     ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
@@ -79,8 +81,14 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
   // Эти кнопки не показываем на карточках для удаления - там сама карточка
   // целиком уже кликабельна для другого действия, вложенные кнопки внутри
   // неё только путали бы.
+  // Ссылка на официальный сайт олимпиады - отдельная, более заметная кнопка
+  // (не просто текстовая ссылка, как "открыть в Google Calendar"), чтобы
+  // сразу было видно, куда идти за подробностями/регистрацией.
+  const olympiadLink = !tappable && e.olympiad_url
+    ? `<button class="olympiad-link-btn" data-link="${escapeHtml(e.olympiad_url)}">🏅 Сайт олимпиады</button>`
+    : "";
   const calLink = !tappable && e.html_link
-    ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Открыть в Google Calendar</button>`
+    ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Google Calendar</button>`
     : "";
   const deleteBtn = !tappable && showDelete
     ? `<button class="delete-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🗑 Удалить</button>`
@@ -90,14 +98,15 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
   const hideBtn = !tappable && showHide
     ? `<button class="hide-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🙈 Скрыть у себя</button>`
     : "";
-  const actionsRow = calLink || deleteBtn || hideBtn
-    ? `<div class="row-actions">${calLink}${hideBtn}${deleteBtn}</div>`
+  const actionsRow = olympiadLink || calLink || deleteBtn || hideBtn
+    ? `<div class="row-actions">${olympiadLink}${calLink}${hideBtn}${deleteBtn}</div>`
     : "";
   return `
-    <div class="card ${liveClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
+    <div class="card ${liveClass} ${olympiadClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
       <div class="row-top">
         <span class="time">${escapeHtml(e.when)}</span>
         ${liveBadge}
+        ${olympiadBadge}
         ${countdownBadge}
       </div>
       <div class="title">${escapeHtml(e.summary)}</div>
@@ -149,7 +158,7 @@ function confirmHide(eventId, summary, onDone) {
 // "удалить", добавленные в eventCard() - вызывать после каждой вставки
 // renderEventList()/renderGroupedByDate() в DOM.
 function bindCardActions(onChanged) {
-  content.querySelectorAll(".cal-link").forEach((btn) => {
+  content.querySelectorAll(".cal-link, .olympiad-link-btn").forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       haptic("light");

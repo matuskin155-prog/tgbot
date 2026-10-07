@@ -81,6 +81,10 @@ def _sync_calendar_events(
                 description=description,
                 start_date=candidate.start,
                 end_date=candidate.end,
+                extended_properties={
+                    "tgbot_olympiad_url": source.url,
+                    "tgbot_olympiad_key": source.key,
+                },
             )
         except Exception:
             logger.exception(

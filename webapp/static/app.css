@@ -10,6 +10,8 @@
   --text: var(--tg-theme-text-color, #000000);
   --live: #ff3b30;
   --live-bg: rgba(255, 59, 48, 0.12);
+  --olympiad: #b8860b;
+  --olympiad-bg: rgba(184, 134, 11, 0.14);
 }
 
 body {
@@ -66,6 +68,10 @@ body {
   width: 4px;
   background: var(--sep);
 }
+.card.is-olympiad {
+  background: var(--olympiad-bg);
+}
+.card.is-olympiad::before { background: var(--olympiad); }
 .card.is-live::before { background: var(--live); }
 .card.is-today::before { background: var(--accent); }
 
@@ -107,6 +113,20 @@ body {
   50% { opacity: 0.45; transform: scale(0.75); }
 }
 
+.olympiad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--olympiad);
+  background: rgba(184, 134, 11, 0.16);
+  padding: 2px 7px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 .card .title { font-size: 16px; font-weight: 600; line-height: 1.3; }
 .card .loc {
   font-size: 13px;
@@ -133,10 +153,25 @@ body {
 .row-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
   margin-top: 8px;
 }
+
+.olympiad-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--olympiad);
+  border: none;
+  padding: 5px 11px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+.olympiad-link-btn:active { opacity: 0.75; }
 
 .cal-link {
   display: inline-flex;

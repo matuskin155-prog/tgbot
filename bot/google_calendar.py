@@ -1,7 +1,7 @@
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from google.oauth2 import service_account
@@ -21,6 +21,10 @@ class CalendarEvent:
     description: Optional[str]
     html_link: Optional[str]
     all_day: bool
+    # Собственные метаданные бота (extendedProperties.private в Google
+    # Calendar) - например, olympiad_url у событий, автозаведённых по
+    # олимпиадам (см. bot/olympiad_watch.py). Обычных событий не касается.
+    extended_properties: Dict[str, str] = field(default_factory=dict)
 
 
 class GoogleCalendarClient:
@@ -67,17 +71,24 @@ class GoogleCalendarClient:
         description: str,
         start_date: date,
         end_date: date,
+        extended_properties: Optional[Dict[str, str]] = None,
     ) -> None:
         """Создаёт all-day событие с заданным id, либо обновляет его, если
         событие с таким id уже есть (используется для автодобавления
         олимпиад — event_id стабилен между проверками, повторный вызов
-        с тем же id не создаёт дубликат, а актуализирует даты/описание)."""
+        с тем же id не создаёт дубликат, а актуализирует даты/описание).
+
+        extended_properties — произвольные строковые метаданные бота
+        (например, ссылка на сайт-первоисточник), не показываются в самом
+        Google Calendar, но возвращаются обратно через API."""
         body = {
             "summary": summary,
             "description": description,
             "start": {"date": start_date.isoformat()},
             "end": {"date": end_date.isoformat()},
         }
+        if extended_properties:
+            body["extendedProperties"] = {"private": extended_properties}
         with self._lock:
             try:
                 self._service.events().insert(
@@ -144,4 +155,5 @@ class GoogleCalendarClient:
             description=item.get("description"),
             html_link=item.get("htmlLink"),
             all_day=all_day,
+            extended_properties=item.get("extendedProperties", {}).get("private", {}),
         )

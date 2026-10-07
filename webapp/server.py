@@ -95,6 +95,7 @@ async def _events_payload(
             "all_day": event.all_day,
             "start_ts": event.start.isoformat(),
             "html_link": event.html_link,
+            "olympiad_url": event.extended_properties.get("tgbot_olympiad_url"),
         }
         for event in events
     ]
