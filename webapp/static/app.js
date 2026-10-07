@@ -394,6 +394,33 @@ function bindDeadlineChips() {
   });
 }
 
+// Дни (включительно), которые покрывает многодневное олимпиадное окно
+// (регистрация/отборочный этап) - для каждого дня запоминаем, это начало,
+// середина или конец ЭТОГО конкретного окна (для скругления полоски в
+// сетке). Без этого разворачивания олимпиада с окном на 20 дней была бы
+// видна только в день начала - а остальные 19 дней выглядели бы пустыми,
+// хотя окно всё ещё открыто.
+function buildOlympiadSpans(events) {
+  const spanDays = new Map(); // dateStr -> { isStart, isEnd }
+  for (const e of events) {
+    if (!e.olympiad_url) continue;
+    const start = new Date(e.date + "T00:00:00");
+    const end = new Date((e.end_date || e.date) + "T00:00:00");
+    const totalDays = Math.round((end - start) / 86400000) + 1;
+    if (totalDays < 1 || totalDays > 120) continue; // защита от мусорных дат
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      const ds = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      const entry = spanDays.get(ds) || { isStart: false, isEnd: false };
+      if (i === 0) entry.isStart = true;
+      if (i === totalDays - 1) entry.isEnd = true;
+      spanDays.set(ds, entry);
+    }
+  }
+  return spanDays;
+}
+
 // Сетка из 42 дней (6 недель), начиная с понедельника той недели, в которую
 // попадает 1-е число - дни соседних месяцев показываются приглушённо, но
 // тоже кликабельны (тап переключает на тот месяц). Если последняя неделя
@@ -407,6 +434,7 @@ function buildMonthGrid(year, month, events, todayStr) {
   for (const e of events) {
     (eventsByDate[e.date] = eventsByDate[e.date] || []).push(e);
   }
+  const spanDays = buildOlympiadSpans(events);
 
   const cells = [];
   for (let i = 0; i < 42; i++) {
@@ -414,6 +442,7 @@ function buildMonthGrid(year, month, events, todayStr) {
     d.setDate(gridStart.getDate() + i);
     const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
     const dayEvents = eventsByDate[dateStr] || [];
+    const span = spanDays.get(dateStr);
     cells.push({
       year: d.getFullYear(),
       month: d.getMonth() + 1,
@@ -421,8 +450,11 @@ function buildMonthGrid(year, month, events, todayStr) {
       dateStr,
       inMonth: d.getMonth() + 1 === month && d.getFullYear() === year,
       isToday: dateStr === todayStr,
-      hasOlympiad: dayEvents.some((e) => e.olympiad_url),
+      isWeekend: d.getDay() === 0 || d.getDay() === 6,
       hasOther: dayEvents.some((e) => !e.olympiad_url),
+      inOlympiadSpan: !!span,
+      spanStart: span ? span.isStart : false,
+      spanEnd: span ? span.isEnd : false,
     });
   }
   if (cells.slice(35).every((c) => !c.inMonth)) cells.length = 35;
@@ -440,16 +472,22 @@ function renderCalendarHeader(year, month) {
 }
 
 function renderCalendarGrid(cells, selectedDate) {
-  const head = WEEKDAYS_SHORT.map((w) => `<div class="cal-weekday">${w}</div>`).join("");
+  const head = WEEKDAYS_SHORT.map((w, i) => `<div class="cal-weekday${i >= 5 ? " is-weekend" : ""}">${w}</div>`).join("");
   const days = cells.map((c) => {
     const classes = ["cal-day"];
     if (!c.inMonth) classes.push("is-outside");
     if (c.isToday) classes.push("is-today");
+    if (c.isWeekend) classes.push("is-weekend");
     if (c.dateStr === selectedDate) classes.push("is-selected");
-    const dots = `${c.hasOlympiad ? '<span class="cal-dot olympiad"></span>' : ""}${c.hasOther ? '<span class="cal-dot"></span>' : ""}`;
+    const otherDot = c.hasOther ? '<span class="cal-dot"></span>' : "";
+    const barClasses = ["cal-span-bar"];
+    if (c.spanStart) barClasses.push("start");
+    if (c.spanEnd) barClasses.push("end");
+    const spanBar = c.inOlympiadSpan ? `<span class="${barClasses.join(" ")}"></span>` : "";
     return `<button type="button" class="${classes.join(" ")}" data-date="${c.dateStr}">
       <span class="cal-day-num">${c.day}</span>
-      <span class="cal-dots">${dots}</span>
+      <span class="cal-dots">${otherDot}</span>
+      ${spanBar}
     </button>`;
   }).join("");
   return `
@@ -457,12 +495,23 @@ function renderCalendarGrid(cells, selectedDate) {
       <div class="cal-weekdays">${head}</div>
       <div class="cal-days">${days}</div>
     </div>
-    <div class="cal-legend"><span class="cal-dot olympiad"></span> олимпиада &nbsp;&nbsp; <span class="cal-dot"></span> другое событие</div>
+    <div class="cal-legend"><span class="cal-legend-bar"></span> период олимпиады &nbsp;&nbsp; <span class="cal-dot"></span> другое событие</div>
   `;
 }
 
+// Для олимпиадных окон день попадает в детали не только если это день
+// НАЧАЛА события (как у обычных событий), но и любой день внутри всего
+// многодневного окна - иначе тап по середине 20-дневной регистрации,
+// которая явно подсвечена полоской в сетке, показывал бы пустоту.
 function dayDetailEvents(events, dateStr) {
-  return events.filter((e) => e.date === dateStr);
+  const target = new Date(dateStr + "T00:00:00");
+  return events.filter((e) => {
+    if (e.date === dateStr) return true;
+    if (!e.olympiad_url) return false;
+    const start = new Date(e.date + "T00:00:00");
+    const end = new Date((e.end_date || e.date) + "T00:00:00");
+    return start <= target && target <= end;
+  });
 }
 
 async function showCalendar() {

@@ -728,6 +728,7 @@ button:focus-visible, a:focus-visible {
   color: var(--hint);
   padding-bottom: 8px;
 }
+.cal-weekday.is-weekend { color: var(--live); }
 .cal-day {
   position: relative;
   aspect-ratio: 1;
@@ -736,6 +737,7 @@ button:focus-visible, a:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 3px;
+  padding-bottom: 7px;
   border: none;
   border-radius: 14px;
   background: none;
@@ -746,6 +748,7 @@ button:focus-visible, a:focus-visible {
 }
 .cal-day:active { transform: scale(0.9); }
 .cal-day-num { font-size: 14px; font-weight: 800; }
+.cal-day.is-weekend .cal-day-num { color: var(--live); }
 .cal-day.is-outside { opacity: 0.32; }
 .cal-day.is-today .cal-day-num {
   color: var(--accent-strong);
@@ -758,7 +761,8 @@ button:focus-visible, a:focus-visible {
   background: linear-gradient(180deg, var(--jelly-top), var(--jelly-bottom));
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 2px 0 #b01a5c;
 }
-.cal-day.is-selected .cal-day-num { color: #fff; }
+.cal-day.is-selected .cal-day-num,
+.cal-day.is-selected.is-weekend .cal-day-num { color: #fff; }
 .cal-dots { display: flex; gap: 3px; height: 6px; }
 .cal-dot {
   width: 6px;
@@ -766,9 +770,23 @@ button:focus-visible, a:focus-visible {
   border-radius: 50%;
   background: var(--secondary);
 }
-.cal-dot.olympiad { background: var(--olympiad-edge); }
 .cal-day.is-selected .cal-dot { background: rgba(255, 255, 255, 0.85); }
-.cal-day.is-selected .cal-dot.olympiad { background: #fff; }
+
+/* Непрерывная полоска под числом - весь охваченный многодневным
+   олимпиадным окном диапазон дней, не только день начала. На "своих"
+   крайних днях скруглена и чуть отступает от края ячейки, на днях
+   посередине окна - доходит до края, чтобы соседние ячейки одной недели
+   зрительно сливались в одну общую полосу. */
+.cal-span-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 5px;
+  background: linear-gradient(90deg, var(--olympiad-edge), #ffcf5c);
+}
+.cal-span-bar.start { left: 4px; border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.cal-span-bar.end { right: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
 
 .cal-legend {
   display: flex;
@@ -779,6 +797,14 @@ button:focus-visible, a:focus-visible {
   font-weight: 700;
   color: var(--hint);
   margin: 10px 0 2px;
+}
+.cal-legend-bar {
+  display: inline-block;
+  width: 18px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--olympiad-edge), #ffcf5c);
+  vertical-align: middle;
 }
 
 .cal-day-detail { margin-top: 22px; }
