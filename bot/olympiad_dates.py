@@ -40,6 +40,14 @@ _STAGE_LABELS = {
     "qualifying": "отборочный этап",
 }
 _STAGE_WINDOW_CHARS = 220
+# Если между датой и упоминанием слова есть граница предложения/абзаца -
+# это упоминание, скорее всего, уже про ДРУГУЮ мысль, даже если по чистому
+# числу символов оно ближе (частый случай: "...до 20 ноября. Отборочный
+# этап..." - следующее предложение может оказаться ближе по символам, чем
+# "своё" предыдущее). Не исключаем такое упоминание совсем (вдруг
+# альтернативы нет), а сильно понижаем его приоритет при выборе владельца.
+_SENTENCE_BOUNDARY_RE = re.compile(r"[.!?]\s|\n\s*\n")
+_BOUNDARY_PENALTY = 10_000
 
 # Дальше ~18 месяцев считаем шумом (старые/неактуальные упоминания дат).
 _FUTURE_WINDOW_DAYS = 548
@@ -125,54 +133,119 @@ def _collect_raw_tokens(text: str, today: date) -> List[dict]:
 
 
 def _group_stage_intervals(text: str, tokens: List[dict]) -> List[dict]:
-    """Для "регистрация"/"отборочный этап" объединяет две ближайшие к
-    ключевому слову даты в один промежуток (а не два отдельных события) -
-    страницы часто пишут начало и конец этапа в разных местах текста, а не
-    одним "с X по Y"."""
+    """Для "регистрация"/"отборочный этап" объединяет ближайшие к слову
+    даты в один промежуток (а не отдельные события) - страницы часто пишут
+    начало и конец этапа в разных местах текста, а не одним "с X по Y", и
+    само ключевое слово нередко встречается на странице несколько раз
+    (навигация, другие упоминания), не только там, где написаны даты.
+
+    В три прохода, от самого надёжного к самому слабому - каждый следующий
+    не трогает уже разобранные более надёжным проходом даты:
+
+    1) Для каждого упоминания слова - если САМАЯ ближайшая к нему (ещё
+       не занятая) дата сама по себе уже диапазон ("с X по Y") - он
+       целиком и описывает этап, его не с чем "парить". Разбирается
+       в первую очередь у всех упоминаний сразу - иначе случайное другое
+       упоминание того же слова в навигации может перехватить этот диапазон
+       раньше, чем до него "дойдёт очередь" у настоящего упоминания рядом.
+    2) У оставшихся непустых упоминаний (ближайшая дата - не диапазон) -
+       если рядом (ещё не занятых) находится две даты, объединяем их в
+       промежуток. Иначе - только одна, откладываем как "половинку" этого
+       этапа (не выбрасываем метку, но и не выдумываем промежуток).
+    3) Половинки одного этапа от РАЗНЫХ упоминаний пытаемся спарить друг с
+       другом - например, "регистрация открывается..." и "регистрация
+       заканчивается..." в разных местах текста.
+
+    Начиная со второго прохода (не раньше - см. ниже) каждая одиночная дата
+    дополнительно закрепляется ровно за ОДНИМ этапом: тем, чьё упоминание
+    слова ближе всего именно к ней. Без этого закрепления дата у конца
+    одного этапа может "утечь" к соседнему упоминанию другого этапа, если
+    тот текстуально стоит чуть ближе - частый случай, когда конец
+    регистрации и начало отборочного этапа описаны соседними фразами.
+    А вот для самого первого прохода (явные диапазоны) закрепление, наоборот,
+    только мешает: диапазон однозначно описывает этап целиком сам по себе,
+    и достаточно того, что он разбирается в порядке появления упоминаний
+    по тексту - более ранее по тексту (обычно и по смыслу идущее первым)
+    упоминание получает его первым."""
+    stage_items = (("registration", _REGISTRATION_RE), ("qualifying", _QUALIFYING_RE))
+    occurrences = {
+        stage_key: [km.start() for km in keyword_re.finditer(text)] for stage_key, keyword_re in stage_items
+    }
+    all_positions = [(stage_key, pos) for stage_key, positions in occurrences.items() for pos in positions]
+
+    token_owner: dict = {}
+    for i, t in enumerate(tokens):
+        best_stage, best_dist = None, None
+        for stage_key, pos in all_positions:
+            d = abs(t["start"] - pos)
+            if d > _STAGE_WINDOW_CHARS:
+                continue
+            lo, hi = (t["start"], pos) if t["start"] < pos else (pos, t["start"])
+            ranked_d = d + _BOUNDARY_PENALTY if _SENTENCE_BOUNDARY_RE.search(text, lo, hi) else d
+            if best_dist is None or ranked_d < best_dist:
+                best_stage, best_dist = stage_key, ranked_d
+        token_owner[i] = best_stage
+
     consumed: set = set()
     grouped: List[dict] = []
 
-    for stage_key, keyword_re in (("registration", _REGISTRATION_RE), ("qualifying", _QUALIFYING_RE)):
-        for km in keyword_re.finditer(text):
-            window_start = max(0, km.start() - _STAGE_WINDOW_CHARS)
-            window_end = km.end() + _STAGE_WINDOW_CHARS
-            nearby = sorted(
-                (
-                    (abs(t["start"] - km.start()), i)
-                    for i, t in enumerate(tokens)
-                    if i not in consumed and window_start <= t["start"] < window_end
-                ),
-            )[:2]
+    def _nearby_unconsumed(km_pos: int, limit: int, *, stage_key: Optional[str] = None) -> List[tuple]:
+        window_start = max(0, km_pos - _STAGE_WINDOW_CHARS)
+        window_end = km_pos + _STAGE_WINDOW_CHARS
+        return sorted(
+            (abs(t["start"] - km_pos), i)
+            for i, t in enumerate(tokens)
+            if i not in consumed
+            and (stage_key is None or token_owner[i] == stage_key)
+            and window_start <= t["start"] < window_end
+        )[:limit]
+
+    def _add_group(stage_key: str, indices: List[int]) -> None:
+        consumed.update(indices)
+        picked = [tokens[i] for i in indices]
+        grouped.append(
+            {
+                "start": min(t["start"] for t in picked),
+                "end": max(t["end"] for t in picked),
+                "low": min(t["low"] for t in picked),
+                "high": max(t["high"] for t in picked),
+                "label": _STAGE_LABELS[stage_key],
+            }
+        )
+
+    # Проход 1: явные диапазоны рядом со своим упоминанием - у всех
+    # упоминаний сразу, прежде чем переходить к более слабым совпадениям.
+    pending: dict = {"registration": [], "qualifying": []}
+    for stage_key, _ in stage_items:
+        for km_pos in occurrences[stage_key]:
+            nearby = _nearby_unconsumed(km_pos, limit=1)
+            if nearby and tokens[nearby[0][1]]["kind"] == "range":
+                _add_group(stage_key, [nearby[0][1]])
+            else:
+                pending[stage_key].append(km_pos)
+
+    # Проход 2: из оставшегося - пары дат рядом с одним упоминанием, либо
+    # одиночная "половинка" на потом.
+    singles_by_stage: dict = {"registration": [], "qualifying": []}
+    for stage_key, _ in stage_items:
+        for km_pos in pending[stage_key]:
+            nearby = _nearby_unconsumed(km_pos, limit=2, stage_key=stage_key)
             if not nearby:
                 continue
-
-            closest_idx = nearby[0][1]
-            if tokens[closest_idx]["kind"] == "range":
-                # Ближайший токен уже сам диапазон ("с X по Y") - он уже
-                # полностью описывает этап целиком, его не с чем "парить":
-                # вторая по близости дата может относиться совсем к другому
-                # этапу дальше в тексте.
-                picked_indices = [closest_idx]
-            elif len(nearby) >= 2:
-                picked_indices = [i for _, i in nearby]
+            if len(nearby) >= 2:
+                _add_group(stage_key, [nearby[0][1], nearby[1][1]])
             else:
-                continue  # одна одиночная дата рядом - не выдумываем промежуток
+                singles_by_stage[stage_key].append(nearby[0][1])
 
-            picked = [tokens[i] for i in picked_indices]
-            low = min(t["low"] for t in picked)
-            high = max(t["high"] for t in picked)
-            pos_start = min(t["start"] for t in picked)
-            pos_end = max(t["end"] for t in picked)
-            consumed.update(picked_indices)
-            grouped.append(
-                {
-                    "start": pos_start,
-                    "end": pos_end,
-                    "low": low,
-                    "high": high,
-                    "label": _STAGE_LABELS[stage_key],
-                }
-            )
+    # Проход 3: спариваем половинки одного этапа от разных упоминаний.
+    for stage_key, singles in singles_by_stage.items():
+        available = sorted(i for i in singles if i not in consumed)
+        for idx_a, idx_b in zip(available[::2], available[1::2]):
+            _add_group(stage_key, [idx_a, idx_b])
+        if len(available) % 2:
+            # Нечётная одна половинка осталась без пары - не выдумываем
+            # промежуток из воздуха, но метку этапа сохраняем.
+            _add_group(stage_key, [available[-1]])
 
     leftover = [t for i, t in enumerate(tokens) if i not in consumed]
     for t in leftover:
