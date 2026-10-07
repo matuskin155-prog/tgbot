@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 DELETE_WINDOW_DAYS = 30
+# Горизонт и лимит для панели "Ближайшие дедлайны олимпиад" на вкладке
+# "Календарь" - независимо от lookahead_hours в настройках (тот обычно
+# короткий, рассчитан на напоминания) и от месяца, открытого в сетке,
+# иначе легко пропустить дедлайн просто не долистав до нужного месяца.
+OLYMPIAD_DEADLINES_WINDOW_DAYS = 270
+OLYMPIAD_DEADLINES_LIMIT = 8
 
 
 def _require_auth(request: web.Request) -> dict:
@@ -86,6 +92,22 @@ def _olympiad_url_for(event: CalendarEvent) -> Optional[str]:
     return source.url if source else None
 
 
+def _end_date(event: CalendarEvent, tz: ZoneInfo) -> Optional[str]:
+    """Последний день, когда событие ещё актуально (например, для дедлайна
+    на карточке в "Ближайших дедлайнах олимпиад"). Google хранит дату конца
+    all-day события исключительной (день ПОСЛЕ последнего) - сдвигаем на
+    день назад, чтобы получить настоящий последний день. Считаем в
+    настроенном часовом поясе бота (как и "date" ниже), а не как есть -
+    end у all-day событий размечен условным UTC без реального смысла
+    часового пояса, его нельзя доверять интерпретировать на клиенте."""
+    if event.end is None:
+        return None
+    end_date = event.end.astimezone(tz).date()
+    if event.all_day:
+        end_date -= timedelta(days=1)
+    return end_date.isoformat()
+
+
 def _serialize_events(
     request: web.Request,
     events: List[CalendarEvent],
@@ -107,6 +129,7 @@ def _serialize_events(
             "when": format_time_range(event, tz),
             "location": event.location,
             "date": event.start.astimezone(tz).date().isoformat(),
+            "end_date": _end_date(event, tz),
             "is_ongoing": is_event_ongoing(event),
             "all_day": event.all_day,
             "start_ts": event.start.isoformat(),
@@ -300,6 +323,23 @@ async def handle_hidden_events(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
+    """Ближайшие по времени олимпиадные события (с датой начала или конца
+    регистрации/отборочного этапа) для панели "Ближайшие дедлайны" на
+    вкладке "Календарь" - в отличие от сетки месяца, не привязано к тому,
+    какой месяц сейчас открыт, чтобы дедлайн не потерялся где-то впереди."""
+    auth = _require_auth(request)
+    try:
+        events = await _events_payload(
+            request, OLYMPIAD_DEADLINES_WINDOW_DAYS * 24, exclude_hidden_for=auth["chat_id"]
+        )
+    except Exception:
+        logger.exception("Не удалось получить ближайшие дедлайны олимпиад")
+        raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
+    olympiad_events = [e for e in events if e["olympiad_url"]][:OLYMPIAD_DEADLINES_LIMIT]
+    return web.json_response(olympiad_events)
+
+
 async def handle_olympiads(request: web.Request) -> web.Response:
     _require_auth(request)
     db: Database = request.app["db"]
@@ -419,6 +459,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/events/hide", handle_events_hide)
     app.router.add_post("/api/events/unhide", handle_events_unhide)
     app.router.add_get("/api/hidden_events", handle_hidden_events)
+    app.router.add_get("/api/olympiads/deadlines", handle_olympiad_deadlines)
     app.router.add_get("/api/olympiads", handle_olympiads)
     app.router.add_post("/api/olympiads/check", handle_olympiads_check)
     app.router.add_post("/api/config", handle_config_update)

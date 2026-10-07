@@ -313,7 +313,7 @@ function pluralEvents(n) {
 const MONTHS_NOM = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-let calendarState = null; // { year, month, events, selectedDate, today }
+let calendarState = null; // { year, month, events, selectedDate, today, deadlines }
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -321,6 +321,77 @@ function pad2(n) {
 
 function ymKey(year, month) {
   return `${year}-${pad2(month)}`;
+}
+
+function pluralDays(n) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return "дней";
+  if (mod10 === 1) return "день";
+  if (mod10 >= 2 && mod10 <= 4) return "дня";
+  return "дней";
+}
+
+// Дата "дедлайна" события - последний день, когда ещё можно успеть (конец
+// периода регистрации/отборочного этапа, а не его начало - если
+// регистрация идёт с 1 по 20 ноября, важно именно 20-е, вне зависимости от
+// того, началась она уже или нет). end_date уже посчитан на сервере в
+// часовом поясе бота (см. _end_date в webapp/server.py) - здесь просто
+// разбираем как календарную дату, без часовых поясов и вычитаний.
+function deadlineDaysLeft(e) {
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const d0 = new Date((e.end_date || e.date) + "T00:00:00");
+  return Math.round((d0 - today0) / 86400000);
+}
+
+function deadlineUrgency(days) {
+  if (days <= 2) return "urgent";
+  if (days <= 10) return "soon";
+  return "";
+}
+
+function deadlineLabel(days) {
+  if (days <= 0) return "сегодня!";
+  if (days === 1) return "завтра";
+  return `${days} ${pluralDays(days)}`;
+}
+
+// Горизонтальная лента ближайших олимпиадных дедлайнов - главная польза
+// вкладки "Календарь": не нужно листать месяцы, чтобы понять, что скоро
+// горит. Тап по карточке переводит сетку месяца на день этого события.
+function renderDeadlines(events) {
+  if (!events || !events.length) return "";
+  const items = events.map((e) => {
+    const days = deadlineDaysLeft(e);
+    const urgency = deadlineUrgency(days);
+    return `
+      <button type="button" class="deadline-chip ${urgency}" data-date="${escapeHtml(e.date)}">
+        <span class="deadline-days">${deadlineLabel(days)}</span>
+        <span class="deadline-name">${escapeHtml(e.summary)}</span>
+      </button>
+    `;
+  }).join("");
+  return `
+    <div class="deadlines-block">
+      <div class="deadlines-header">⏳ Ближайшие дедлайны олимпиад</div>
+      <div class="deadlines-list">${items}</div>
+    </div>
+  `;
+}
+
+function bindDeadlineChips() {
+  content.querySelectorAll(".deadline-chip").forEach((btn) => {
+    btn.onclick = () => {
+      haptic("light");
+      const d = btn.dataset.date;
+      const [y, m] = d.split("-").map(Number);
+      calendarState.year = y;
+      calendarState.month = m;
+      calendarState.selectedDate = d;
+      loadCalendarMonth();
+    };
+  });
 }
 
 // Сетка из 42 дней (6 недель), начиная с понедельника той недели, в которую
@@ -398,16 +469,31 @@ async function showCalendar() {
   titleEl.textContent = "Календарь";
   if (!calendarState) {
     const now = new Date();
-    calendarState = { year: now.getFullYear(), month: now.getMonth() + 1, events: [], selectedDate: null, today: null };
+    calendarState = { year: now.getFullYear(), month: now.getMonth() + 1, events: [], selectedDate: null, today: null, deadlines: null };
+  }
+  if (!calendarState.deadlines) {
+    try {
+      calendarState.deadlines = await api("/api/olympiads/deadlines");
+    } catch (e) {
+      calendarState.deadlines = [];
+    }
   }
   await loadCalendarMonth();
 }
 
+// Полная перезагрузка и сетки месяца, и ленты дедлайнов - используется
+// после скрытия/удаления события, чтобы оно пропало отовсюду сразу.
+async function refreshCalendar() {
+  calendarState.deadlines = null;
+  await showCalendar();
+}
+
 async function loadCalendarMonth() {
-  const { year, month } = calendarState;
+  const { year, month, deadlines } = calendarState;
   setSubtitle("");
-  content.innerHTML = renderCalendarHeader(year, month) + skeleton(3);
+  content.innerHTML = renderDeadlines(deadlines) + renderCalendarHeader(year, month) + skeleton(3);
   bindCalendarNav();
+  bindDeadlineChips();
   try {
     const data = await api(`/api/events/calendar?year=${year}&month=${month}`);
     calendarState.events = data.events;
@@ -420,19 +506,21 @@ async function loadCalendarMonth() {
     }
     renderCalendarView();
   } catch (e) {
-    content.innerHTML = renderCalendarHeader(year, month) + emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
+    content.innerHTML = renderDeadlines(deadlines) + renderCalendarHeader(year, month) + emptyState("⚠️", "Не удалось загрузить: " + escapeHtml(e.message));
     bindCalendarNav();
+    bindDeadlineChips();
   }
 }
 
 function renderCalendarView() {
-  const { year, month, events, selectedDate, today } = calendarState;
+  const { year, month, events, selectedDate, today, deadlines } = calendarState;
   const cells = buildMonthGrid(year, month, events, today);
   const dayEvents = dayDetailEvents(events, selectedDate);
   const olympiadTotal = events.filter((e) => e.olympiad_url).length;
   setSubtitle(`${events.length} ${pluralEvents(events.length)} за месяц` + (olympiadTotal ? ` · ${olympiadTotal} олимпиад` : ""));
 
   content.innerHTML =
+    renderDeadlines(deadlines) +
     renderCalendarHeader(year, month) +
     renderCalendarGrid(cells, selectedDate) +
     `<div class="cal-day-detail">
@@ -441,6 +529,7 @@ function renderCalendarView() {
     </div>`;
 
   bindCalendarNav();
+  bindDeadlineChips();
   content.querySelectorAll(".cal-day").forEach((btn) => {
     btn.onclick = () => {
       haptic("light");
@@ -457,7 +546,7 @@ function renderCalendarView() {
       }
     };
   });
-  bindCardActions(loadCalendarMonth);
+  bindCardActions(refreshCalendar);
 }
 
 function bindCalendarNav() {
