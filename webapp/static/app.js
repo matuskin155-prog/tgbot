@@ -5,6 +5,15 @@ if (tg.setHeaderColor) {
   try { tg.setHeaderColor("secondary_bg_color"); } catch (e) { /* старые клиенты */ }
 }
 
+// У приложения свой фирменный кавайный пастельный вид (не берём цвета из
+// темы собеседника в Telegram) - только переключаем светлый/тёмный вариант
+// вслед за самим Telegram, через data-theme на <html>.
+function applyColorScheme() {
+  document.documentElement.dataset.theme = tg.colorScheme === "dark" ? "dark" : "light";
+}
+applyColorScheme();
+try { tg.onEvent("themeChanged", applyColorScheme); } catch (e) { /* старые клиенты */ }
+
 const INIT_DATA = tg.initData || "";
 const content = document.getElementById("content");
 const titleEl = document.getElementById("page-title");

@@ -1,44 +1,98 @@
 * { box-sizing: border-box; }
 
 :root {
-  --accent: var(--tg-theme-button-color, #2481cc);
-  --accent-text: var(--tg-theme-button-text-color, #fff);
-  --hint: var(--tg-theme-hint-color, #8e8e93);
-  --sep: var(--tg-theme-section-separator-color, #e5e5e5);
-  --card-bg: var(--tg-theme-secondary-bg-color, #f5f5f5);
-  --bg: var(--tg-theme-bg-color, #ffffff);
-  --text: var(--tg-theme-text-color, #000000);
-  --live: #ff3b30;
-  --live-bg: rgba(255, 59, 48, 0.12);
-  --olympiad: #b8860b;
-  --olympiad-bg: rgba(184, 134, 11, 0.14);
+  /* Кавайная пастельная палитра - светлый вариант по умолчанию.
+     Это фирменный вид приложения, не берём цвета из темы чата в Telegram -
+     подстраиваемся только под светлый/тёмный режим (см. ниже и app.js). */
+  --bg: #fff6fa;
+  --card-bg: #ffffff;
+  --sep: #ffd9ea;
+  --text: #5b3a52;
+  --hint: #b896ae;
+  --accent: #ff6fa5;
+  --accent-text: #ffffff;
+  --accent-soft: #ffe1ed;
+  --secondary: #9b8afb;
+  --secondary-soft: #ece6ff;
+  --olympiad: #e08f00;
+  --olympiad-soft: #fff1d6;
+  --live: #f23c74;
+  --live-soft: #ffe1ec;
+  --shadow-color: rgba(255, 111, 165, 0.25);
+  --font-main: "Quicksand", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #241a2e;
+    --card-bg: #342742;
+    --sep: #4a3658;
+    --text: #f5e9f7;
+    --hint: #b49bc4;
+    --accent: #ff8fc0;
+    --accent-text: #2b1830;
+    --accent-soft: rgba(255, 143, 192, 0.2);
+    --secondary: #c4b2ff;
+    --secondary-soft: rgba(196, 178, 255, 0.18);
+    --olympiad: #ffc34d;
+    --olympiad-soft: rgba(255, 195, 77, 0.18);
+    --live: #ff6f9c;
+    --live-soft: rgba(255, 111, 156, 0.18);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #241a2e;
+  --card-bg: #342742;
+  --sep: #4a3658;
+  --text: #f5e9f7;
+  --hint: #b49bc4;
+  --accent: #ff8fc0;
+  --accent-text: #2b1830;
+  --accent-soft: rgba(255, 143, 192, 0.2);
+  --secondary: #c4b2ff;
+  --secondary-soft: rgba(196, 178, 255, 0.18);
+  --olympiad: #ffc34d;
+  --olympiad-soft: rgba(255, 195, 77, 0.18);
+  --live: #ff6f9c;
+  --live-soft: rgba(255, 111, 156, 0.18);
+  --shadow-color: rgba(0, 0, 0, 0.4);
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-main);
   background: var(--bg);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .topbar {
-  padding: 14px 16px 12px;
+  padding: 18px 16px 14px;
   position: sticky;
   top: 0;
-  background: var(--bg);
-  border-bottom: 1px solid var(--sep);
+  background: linear-gradient(135deg, var(--accent-soft), var(--secondary-soft) 70%);
+  border-bottom: 2px solid var(--sep);
   z-index: 5;
 }
-.topbar h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.2px; }
+.topbar h1 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
 .subtitle {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: 13px;
+  font-weight: 600;
   color: var(--hint);
   min-height: 16px;
 }
 
-#content { padding: 14px 16px 88px; min-height: 60vh; animation: fade-in 0.18s ease-out; }
+#content { padding: 16px 16px 92px; min-height: 60vh; animation: fade-in 0.18s ease-out; }
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(2px); }
@@ -49,27 +103,31 @@ body {
 .card {
   position: relative;
   background: var(--card-bg);
-  border-radius: 14px;
-  padding: 13px 15px 13px 18px;
-  margin-bottom: 9px;
+  border: 2px solid var(--sep);
+  border-radius: 20px;
+  padding: 13px 16px 13px 19px;
+  margin-bottom: 11px;
   overflow: hidden;
   opacity: 0;
-  animation: card-in 0.28s ease-out forwards;
+  box-shadow: 0 3px 10px var(--shadow-color);
+  animation: card-in 0.3s ease-out forwards;
   animation-delay: calc(var(--i, 0) * 35ms);
 }
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
 .card::before {
   content: "";
   position: absolute;
   left: 0; top: 0; bottom: 0;
-  width: 4px;
+  width: 5px;
+  border-radius: 0 4px 4px 0;
   background: var(--sep);
 }
 .card.is-olympiad {
-  background: var(--olympiad-bg);
+  background: var(--olympiad-soft);
+  border-color: var(--olympiad);
 }
 .card.is-olympiad::before { background: var(--olympiad); }
 .card.is-live::before { background: var(--live); }
@@ -79,11 +137,12 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 .card .time {
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--hint);
 }
 .card.is-live .time { color: var(--live); }
@@ -93,10 +152,10 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--live);
-  background: var(--live-bg);
-  padding: 2px 7px 2px 6px;
+  background: var(--live-soft);
+  padding: 3px 8px 3px 7px;
   border-radius: 20px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -118,35 +177,35 @@ body {
   align-items: center;
   gap: 3px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--olympiad);
-  background: rgba(184, 134, 11, 0.16);
-  padding: 2px 7px;
+  background: var(--olympiad-soft);
+  padding: 3px 8px;
   border-radius: 20px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
-.card .title { font-size: 16px; font-weight: 600; line-height: 1.3; }
+.card .title { font-size: 16px; font-weight: 700; line-height: 1.35; }
 .card .loc {
   font-size: 13px;
   color: var(--hint);
   margin-top: 5px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .card a { color: inherit; text-decoration: none; }
-.card.tappable { cursor: pointer; transition: transform 0.08s ease; }
-.card.tappable:active { transform: scale(0.98); }
+.card.tappable { cursor: pointer; transition: transform 0.1s ease; }
+.card.tappable:active { transform: scale(0.97); }
 
 .countdown {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--accent);
-  background: var(--card-bg); /* запасной вариант для браузеров без color-mix() */
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  padding: 2px 7px;
+  background: var(--accent-soft);
+  padding: 3px 8px;
   border-radius: 20px;
 }
 
@@ -155,7 +214,7 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 14px;
-  margin-top: 8px;
+  margin-top: 9px;
 }
 
 .olympiad-link-btn {
@@ -163,23 +222,24 @@ body {
   align-items: center;
   gap: 5px;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 800;
   color: #fff;
   background: var(--olympiad);
   border: none;
-  padding: 5px 11px;
+  padding: 6px 13px;
   border-radius: 20px;
   cursor: pointer;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
-.olympiad-link-btn:active { opacity: 0.75; }
+.olympiad-link-btn:active { opacity: 0.8; transform: scale(0.97); }
 
 .cal-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 700;
+  color: var(--secondary);
   background: none;
   border: none;
   padding: 0;
@@ -192,7 +252,7 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--live);
   background: none;
   border: none;
@@ -207,7 +267,7 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--hint);
   background: none;
   border: none;
@@ -219,11 +279,11 @@ body {
 /* --- Группировка по дате (Ближайшие) --- */
 .date-heading {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--hint);
+  font-weight: 800;
+  color: var(--secondary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin: 18px 0 8px;
+  margin: 20px 0 9px;
 }
 .date-heading:first-child { margin-top: 0; }
 
@@ -233,16 +293,17 @@ body {
   color: var(--hint);
   padding: 56px 16px;
   font-size: 15px;
+  font-weight: 600;
   line-height: 1.5;
 }
-.empty .emoji { font-size: 34px; display: block; margin-bottom: 10px; }
+.empty .emoji { font-size: 40px; display: block; margin-bottom: 10px; }
 
 /* --- Скелетон загрузки --- */
 .skeleton-list { padding-top: 2px; }
 .skeleton-card {
   height: 64px;
-  border-radius: 14px;
-  margin-bottom: 9px;
+  border-radius: 20px;
+  margin-bottom: 11px;
   background: linear-gradient(100deg, var(--card-bg) 30%, var(--sep) 50%, var(--card-bg) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
@@ -259,83 +320,90 @@ body {
   justify-content: center;
   gap: 6px;
   width: 100%;
-  padding: 13px;
+  padding: 14px;
   border: none;
-  border-radius: 12px;
+  border-radius: 999px;
   background: var(--accent);
   color: var(--accent-text);
+  font-family: var(--font-main);
   font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 10px;
+  font-weight: 700;
+  margin-bottom: 11px;
   cursor: pointer;
+  box-shadow: 0 4px 14px var(--shadow-color);
   transition: opacity 0.1s ease, transform 0.08s ease;
 }
-.btn:active { transform: scale(0.985); }
-.btn:disabled { opacity: 0.55; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.55; box-shadow: none; }
 .btn.secondary {
-  background: var(--card-bg);
-  color: var(--text);
+  background: var(--secondary-soft);
+  color: var(--secondary);
+  box-shadow: none;
 }
 .btn.danger { background: var(--live); color: #fff; }
-.btn.small { padding: 9px; font-size: 13.5px; margin-bottom: 0; }
+.btn.small { padding: 10px; font-size: 13.5px; margin-bottom: 0; }
 
 /* --- Секции настроек --- */
 .section-title {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--hint);
+  font-weight: 800;
+  color: var(--secondary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin: 20px 0 8px;
+  margin: 22px 0 9px;
 }
 .section-title:first-child { margin-top: 2px; }
 
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 13px; color: var(--hint); margin-bottom: 5px; }
+.field { margin-bottom: 13px; }
+.field label { display: block; font-size: 13px; font-weight: 700; color: var(--hint); margin-bottom: 5px; }
 .field .hint { font-size: 11.5px; color: var(--hint); margin-top: 4px; }
 .field input {
   width: 100%;
-  padding: 11px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--sep);
-  background: var(--bg);
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px solid var(--sep);
+  background: var(--card-bg);
   color: var(--text);
+  font-family: var(--font-main);
   font-size: 15px;
+  font-weight: 600;
   transition: border-color 0.12s ease;
 }
 .field input:focus { outline: none; border-color: var(--accent); }
 
 .info-card {
   background: var(--card-bg);
-  border-radius: 14px;
-  padding: 14px 16px;
-  margin-bottom: 12px;
+  border: 2px solid var(--sep);
+  border-radius: 20px;
+  padding: 15px 17px;
+  margin-bottom: 13px;
 }
-.info-card .title { font-size: 16px; font-weight: 600; }
-.info-card .loc { font-size: 13px; color: var(--hint); margin-top: 4px; }
+.info-card .title { font-size: 16px; font-weight: 700; }
+.info-card .loc { font-size: 13px; font-weight: 600; color: var(--hint); margin-top: 4px; }
 
 /* --- Блок "Этот месяц" --- */
 .month-card {
-  background: var(--card-bg);
-  border-radius: 14px;
-  padding: 14px 16px 16px;
-  margin-bottom: 12px;
+  background: linear-gradient(160deg, var(--card-bg), var(--accent-soft) 160%);
+  border: 2px solid var(--sep);
+  border-radius: 20px;
+  padding: 15px 17px 17px;
+  margin-bottom: 13px;
 }
 .month-header {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--hint);
+  font-weight: 800;
+  color: var(--secondary);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  margin-bottom: 12px;
+  margin-bottom: 13px;
 }
 .month-stats {
   display: flex;
   gap: 28px;
-  margin-bottom: 14px;
+  margin-bottom: 15px;
 }
 .month-stat-num {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1;
   color: var(--accent);
@@ -343,8 +411,9 @@ body {
 .month-stat.olympiad .month-stat-num { color: var(--olympiad); }
 .month-stat-label {
   font-size: 12px;
+  font-weight: 700;
   color: var(--hint);
-  margin-top: 3px;
+  margin-top: 4px;
 }
 .month-bars {
   display: flex;
@@ -368,20 +437,21 @@ body {
   width: 100%;
   max-width: 26px;
   min-height: 3px;
-  border-radius: 4px 4px 0 0;
+  border-radius: 6px 6px 2px 2px;
   background: var(--accent);
 }
 .month-bar-count {
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--hint);
-  margin-top: 4px;
+  margin-top: 5px;
 }
 .month-bars-hint {
   font-size: 11px;
+  font-weight: 600;
   color: var(--hint);
   text-align: center;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* --- Бейджи (олимпиады) --- */
@@ -390,17 +460,18 @@ body {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-weight: 800;
+  padding: 3px 9px;
   border-radius: 20px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   margin-left: 6px;
   vertical-align: middle;
 }
-.badge.new { color: var(--live); background: var(--live-bg); }
+.badge.new { color: var(--live); background: var(--live-soft); }
 .olympiad-link {
   font-size: 12px;
+  font-weight: 600;
   color: var(--hint);
   margin-top: 4px;
   display: flex;
@@ -415,8 +486,8 @@ body {
   left: 0;
   right: 0;
   display: flex;
-  background: var(--bg);
-  border-top: 1px solid var(--sep);
+  background: var(--card-bg);
+  border-top: 2px solid var(--sep);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tab-btn {
@@ -424,27 +495,28 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 0 6px;
+  gap: 3px;
+  padding: 9px 0 7px;
   background: none;
   border: none;
   color: var(--hint);
+  font-family: var(--font-main);
   transition: color 0.1s ease, transform 0.08s ease;
 }
-.tab-btn:active { transform: scale(0.94); }
+.tab-btn:active { transform: scale(0.9); }
 .tab-btn .ic {
   font-size: 18px;
-  width: 32px;
-  height: 22px;
+  width: 36px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  transition: background 0.15s ease;
+  border-radius: 999px;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 .tab-btn.active .ic {
-  background: var(--card-bg);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--accent-soft);
+  transform: scale(1.08);
 }
-.tab-btn span:last-child { font-size: 11px; font-weight: 500; }
+.tab-btn span:last-child { font-size: 11px; font-weight: 700; }
 .tab-btn.active { color: var(--accent); }
