@@ -42,6 +42,7 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand("config", "Текущие настройки (админ)"),
     BotCommand("set_calendar", "Сменить календарь"),
     BotCommand("set_reminders", "За сколько минут напоминать"),
+    BotCommand("set_olympiad_deadlines", "За сколько дней напоминать о дедлайне олимпиады"),
     BotCommand("set_lookahead", "Горизонт просмотра"),
     BotCommand("set_interval", "Интервал опроса календаря"),
     BotCommand("set_timezone", "Часовой пояс"),
@@ -116,6 +117,7 @@ def main() -> None:
         Defaults(
             calendar_id=settings.google_calendar_id,
             reminder_minutes_before=settings.reminder_minutes_before,
+            olympiad_deadline_days_before=settings.olympiad_deadline_days_before,
             poll_interval_seconds=settings.poll_interval_seconds,
             lookahead_hours=settings.lookahead_hours,
             timezone=settings.timezone,
@@ -148,6 +150,7 @@ def main() -> None:
     application.add_handler(CommandHandler("config", handlers.config_command))
     application.add_handler(CommandHandler("set_calendar", handlers.set_calendar))
     application.add_handler(CommandHandler("set_reminders", handlers.set_reminders))
+    application.add_handler(CommandHandler("set_olympiad_deadlines", handlers.set_olympiad_deadlines))
     application.add_handler(CommandHandler("set_lookahead", handlers.set_lookahead))
     application.add_handler(CommandHandler("set_interval", handlers.set_interval))
     application.add_handler(CommandHandler("set_timezone", handlers.set_timezone))

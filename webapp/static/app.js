@@ -703,6 +703,11 @@ async function showSettings() {
       <input id="f-reminders" value="${escapeHtml(cfg.reminder_minutes_before)}" />
       <div class="hint">Через запятую, например: 60, 10</div>
     </div>
+    <div class="field">
+      <label>За сколько дней напоминать о дедлайне олимпиады</label>
+      <input id="f-olympiad-deadlines" value="${escapeHtml(cfg.olympiad_deadline_days_before)}" />
+      <div class="hint">Отдельно от напоминаний выше — для окна регистрации/отборочного этапа, считает от даты ЗАКРЫТИЯ, а не начала. Через запятую, например: 7, 1</div>
+    </div>
     <div class="field"><label>Горизонт просмотра, часы</label><input id="f-lookahead" value="${cfg.lookahead_hours}" /></div>
     <div class="field"><label>Время ежедневной сводки, ЧЧ:ММ</label><input id="f-digest" value="${escapeHtml(cfg.daily_digest_time)}" /></div>
     <div class="field"><label>Часовой пояс</label><input id="f-timezone" value="${escapeHtml(cfg.timezone)}" /></div>
@@ -729,6 +734,7 @@ async function showSettings() {
         body: JSON.stringify({
           calendar_id: document.getElementById("f-calendar").value,
           reminder_minutes_before: document.getElementById("f-reminders").value,
+          olympiad_deadline_days_before: document.getElementById("f-olympiad-deadlines").value,
           lookahead_hours: document.getElementById("f-lookahead").value,
           poll_interval_seconds: document.getElementById("f-interval").value,
           timezone: document.getElementById("f-timezone").value,

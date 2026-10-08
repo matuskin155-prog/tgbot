@@ -10,10 +10,10 @@ from aiohttp import web
 
 from bot.config import Settings, load_settings
 from bot.database import Database
-from bot.formatting import format_time_range, is_event_ongoing
+from bot.formatting import event_end_date, format_time_range, is_event_ongoing
 from bot.google_calendar import CalendarEvent, GoogleCalendarClient
 from bot.olympiad_watch import check_olympiad_sources
-from bot.olympiads import TRACKED_SOURCES, match_source_by_text
+from bot.olympiads import TRACKED_SOURCES, olympiad_url_for
 from bot.runtime_config import ConfigError, Defaults, RuntimeConfig
 
 from .auth import InitDataError, validate_init_data
@@ -79,33 +79,13 @@ async def handle_unsubscribe(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
-def _olympiad_url_for(event: CalendarEvent) -> Optional[str]:
-    """Ссылка на сайт олимпиады для карточки события в Mini App - либо
-    записанная ботом при автосоздании события (надёжный путь), либо, если
-    её нет (событие вписано в календарь вручную), распознанная по названию
-    события среди отслеживаемых олимпиад (см. match_source_by_text -
-    текстовое совпадение, не гарантия)."""
-    url = event.extended_properties.get("tgbot_olympiad_url")
-    if url:
-        return url
-    source = match_source_by_text(event.summary)
-    return source.url if source else None
-
-
 def _end_date(event: CalendarEvent, tz: ZoneInfo) -> Optional[str]:
-    """Последний день, когда событие ещё актуально (например, для дедлайна
-    на карточке в "Ближайших дедлайнах олимпиад"). Google хранит дату конца
-    all-day события исключительной (день ПОСЛЕ последнего) - сдвигаем на
-    день назад, чтобы получить настоящий последний день. Считаем в
-    настроенном часовом поясе бота (как и "date" ниже), а не как есть -
-    end у all-day событий размечен условным UTC без реального смысла
-    часового пояса, его нельзя доверять интерпретировать на клиенте."""
-    if event.end is None:
-        return None
-    end_date = event.end.astimezone(tz).date()
-    if event.all_day:
-        end_date -= timedelta(days=1)
-    return end_date.isoformat()
+    """Дата конца события как строка для JSON-ответа (например, для
+    дедлайна на карточке в "Ближайших дедлайнах олимпиад") - см.
+    event_end_date в bot/formatting.py за тем, почему это не просто
+    event.end.date()."""
+    end_date = event_end_date(event, tz)
+    return end_date.isoformat() if end_date else None
 
 
 def _serialize_events(
@@ -134,7 +114,7 @@ def _serialize_events(
             "all_day": event.all_day,
             "start_ts": event.start.isoformat(),
             "html_link": event.html_link,
-            "olympiad_url": _olympiad_url_for(event),
+            "olympiad_url": olympiad_url_for(event),
         }
         for event in events
     ]
@@ -402,6 +382,7 @@ async def handle_config_update(request: web.Request) -> web.Response:
     setters = {
         "calendar_id": runtime.set_calendar_id,
         "reminder_minutes_before": runtime.set_reminder_minutes_before,
+        "olympiad_deadline_days_before": runtime.set_olympiad_deadline_days_before,
         "lookahead_hours": runtime.set_lookahead_hours,
         "poll_interval_seconds": runtime.set_poll_interval_seconds,
         "timezone": runtime.set_timezone,
@@ -434,6 +415,7 @@ def create_app() -> web.Application:
         Defaults(
             calendar_id=settings.google_calendar_id,
             reminder_minutes_before=settings.reminder_minutes_before,
+            olympiad_deadline_days_before=settings.olympiad_deadline_days_before,
             poll_interval_seconds=settings.poll_interval_seconds,
             lookahead_hours=settings.lookahead_hours,
             timezone=settings.timezone,

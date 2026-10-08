@@ -24,6 +24,22 @@ def _parse_minutes(raw: str) -> List[int]:
     return sorted(set(minutes), reverse=True)
 
 
+def _parse_days(raw: str) -> List[int]:
+    days = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            value = int(part)
+            if value < 0:
+                raise ValueError(
+                    "OLYMPIAD_DEADLINE_DAYS_BEFORE должен состоять из чисел 0 и больше"
+                )
+            days.append(value)
+    if not days:
+        raise ValueError("OLYMPIAD_DEADLINE_DAYS_BEFORE не может быть пустым")
+    return sorted(set(days), reverse=True)
+
+
 def _parse_admin_ids(raw: str) -> List[int]:
     ids = []
     for part in raw.split(","):
@@ -49,6 +65,7 @@ class Settings:
     google_calendar_id: str
     google_service_account_file: str
     reminder_minutes_before: List[int]
+    olympiad_deadline_days_before: List[int]
     poll_interval_seconds: int
     lookahead_hours: int
     timezone: str
@@ -72,6 +89,9 @@ def load_settings() -> Settings:
         ),
         reminder_minutes_before=_parse_minutes(
             os.environ.get("REMINDER_MINUTES_BEFORE", "60,10")
+        ),
+        olympiad_deadline_days_before=_parse_days(
+            os.environ.get("OLYMPIAD_DEADLINE_DAYS_BEFORE", "7,1")
         ),
         poll_interval_seconds=int(os.environ.get("POLL_INTERVAL_SECONDS", "60")),
         lookahead_hours=int(os.environ.get("LOOKAHEAD_HOURS", "24")),

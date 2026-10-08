@@ -1,6 +1,11 @@
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    # Только для подсказок типов - реальный импорт втянул бы google-api-
+    # python-client в модуль, у которого иначе нет таких зависимостей.
+    from .google_calendar import CalendarEvent
 
 
 @dataclass(frozen=True)
@@ -149,3 +154,18 @@ def match_source_by_text(text: Optional[str]) -> Optional[OlympiadSource]:
                     best = source
                     best_score = score
     return best
+
+
+def olympiad_url_for(event: "CalendarEvent") -> Optional[str]:
+    """Ссылка на сайт олимпиады для календарного события - либо записанная
+    ботом при автосоздании события (надёжный путь), либо, если её нет
+    (событие вписано в календарь вручную), распознанная по названию события
+    среди отслеживаемых олимпиад (см. match_source_by_text выше -
+    текстовое совпадение, не гарантия). Общая для Mini App (показать
+    бейдж/ссылку на карточке) и бота (отличить олимпиадное дедлайн-событие
+    для напоминаний о закрытии регистрации/отборочного этапа)."""
+    url = event.extended_properties.get("tgbot_olympiad_url")
+    if url:
+        return url
+    source = match_source_by_text(event.summary)
+    return source.url if source else None

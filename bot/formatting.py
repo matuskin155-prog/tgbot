@@ -1,8 +1,28 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import escape
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from .google_calendar import CalendarEvent
+
+
+def event_end_date(event: CalendarEvent, tz: ZoneInfo) -> Optional[date]:
+    """Последний день, когда событие ещё актуально, в часовом поясе tz -
+    например, для определения, сколько дней осталось до закрытия
+    многодневного окна регистрации/отборочного этапа олимпиады.
+
+    Google хранит дату конца all-day события исключительной (день ПОСЛЕ
+    последнего дня события) - сдвигаем на день назад. У all-day событий сам
+    end размечен условным UTC без реального смысла часового пояса (это
+    просто то, как _parse_event в google_calendar.py кодирует голую дату),
+    поэтому пересчитывать его в tz нужно именно так, а не интерпретировать
+    время "как есть"."""
+    if event.end is None:
+        return None
+    end_date = event.end.astimezone(tz).date()
+    if event.all_day:
+        end_date -= timedelta(days=1)
+    return end_date
 
 
 def is_event_ongoing(event: CalendarEvent) -> bool:

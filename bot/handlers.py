@@ -42,6 +42,8 @@ ADMIN_HELP_TEXT = (
     "/config — показать текущие настройки\n"
     "/set_calendar <id> — сменить календарь\n"
     "/set_reminders <60,10> — за сколько минут напоминать\n"
+    "/set_olympiad_deadlines <7,1> — за сколько дней напоминать о закрытии "
+    "регистрации/отборочного этапа олимпиады\n"
     "/set_lookahead <часы> — горизонт просмотра\n"
     "/set_interval <секунды> — как часто опрашивать календарь\n"
     "/set_timezone <Europe/Moscow> — часовой пояс\n"
@@ -186,6 +188,7 @@ async def config_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "<b>Текущие настройки</b>\n"
         f"Календарь: {escape(cfg['calendar_id'])}\n"
         f"Напоминания за (мин): {cfg['reminder_minutes_before']}\n"
+        f"Дедлайны олимпиад за (дней): {cfg['olympiad_deadline_days_before']}\n"
         f"Горизонт просмотра: {cfg['lookahead_hours']} ч.\n"
         f"Опрос календаря: каждые {cfg['poll_interval_seconds']} сек.\n"
         f"Часовой пояс: {escape(cfg['timezone'])}\n"
@@ -226,6 +229,22 @@ async def set_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     minutes = ", ".join(str(m) for m in runtime.reminder_minutes_before)
     await update.effective_message.reply_text(f"Пороги напоминаний обновлены: {minutes}")
+
+
+async def set_olympiad_deadlines(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_admin(update, context):
+        return
+    if not context.args:
+        await update.effective_message.reply_text("Использование: /set_olympiad_deadlines <7,1>")
+        return
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    try:
+        runtime.set_olympiad_deadline_days_before(" ".join(context.args))
+    except ConfigError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    days = ", ".join(str(d) for d in runtime.olympiad_deadline_days_before)
+    await update.effective_message.reply_text(f"Пороги дедлайнов олимпиад обновлены: {days}")
 
 
 async def set_lookahead(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

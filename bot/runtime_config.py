@@ -14,6 +14,7 @@ class ConfigError(ValueError):
 class Defaults:
     calendar_id: str
     reminder_minutes_before: List[int]
+    olympiad_deadline_days_before: List[int]
     poll_interval_seconds: int
     lookahead_hours: int
     timezone: str
@@ -36,6 +37,9 @@ class RuntimeConfig:
         self._db.set_setting_if_absent("calendar_id", defaults.calendar_id)
         self._db.set_setting_if_absent(
             "reminder_minutes_before", _format_minutes(defaults.reminder_minutes_before)
+        )
+        self._db.set_setting_if_absent(
+            "olympiad_deadline_days_before", _format_minutes(defaults.olympiad_deadline_days_before)
         )
         self._db.set_setting_if_absent(
             "poll_interval_seconds", str(defaults.poll_interval_seconds)
@@ -61,6 +65,14 @@ class RuntimeConfig:
     def set_reminder_minutes_before(self, raw: str) -> None:
         minutes = _parse_minutes(raw)
         self._db.set_setting("reminder_minutes_before", _format_minutes(minutes))
+
+    @property
+    def olympiad_deadline_days_before(self) -> List[int]:
+        return _parse_days(self._db.get_setting("olympiad_deadline_days_before"))
+
+    def set_olympiad_deadline_days_before(self, raw: str) -> None:
+        days = _parse_days(raw)
+        self._db.set_setting("olympiad_deadline_days_before", _format_minutes(days))
 
     @property
     def poll_interval_seconds(self) -> int:
@@ -120,6 +132,7 @@ class RuntimeConfig:
         return {
             "calendar_id": self.calendar_id,
             "reminder_minutes_before": ", ".join(str(m) for m in self.reminder_minutes_before),
+            "olympiad_deadline_days_before": ", ".join(str(d) for d in self.olympiad_deadline_days_before),
             "poll_interval_seconds": self.poll_interval_seconds,
             "lookahead_hours": self.lookahead_hours,
             "timezone": self.timezone,
@@ -155,6 +168,31 @@ def _parse_minutes(raw: str) -> List[int]:
 
 def _format_minutes(minutes: List[int]) -> str:
     return ",".join(str(m) for m in minutes)
+
+
+def _parse_days(raw: str) -> List[int]:
+    days = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError as exc:
+            raise ConfigError(
+                "Список должен быть числами через запятую, например: 7,1"
+            ) from exc
+        if value < 0:
+            # 0 допустим (в последний день, когда окно ещё открыто) - в
+            # отличие от минутных напоминаний, порог тут проверяется днями
+            # ДО того, как check_reminders() решит, что время уже прошло.
+            raise ConfigError(
+                "Число дней до дедлайна не может быть отрицательным (например: 7,1)"
+            )
+        days.append(value)
+    if not days:
+        raise ConfigError("Нужно указать хотя бы одно значение, например: 7,1")
+    return sorted(set(days), reverse=True)
 
 
 def _parse_digest_time(raw: str) -> time:
