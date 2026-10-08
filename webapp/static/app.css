@@ -717,7 +717,7 @@ button:focus-visible, a:focus-visible {
   padding: 12px 10px;
   box-shadow: 4px 4px 0 var(--pop);
 }
-.cal-weekdays, .cal-days {
+.cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
 }
@@ -729,17 +729,19 @@ button:focus-visible, a:focus-visible {
   padding-bottom: 8px;
 }
 .cal-weekday.is-weekend { color: var(--live); }
+
+.cal-week { margin-bottom: 6px; }
+.cal-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
 .cal-day {
-  position: relative;
-  aspect-ratio: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding-bottom: 7px;
+  min-height: 32px;
   border: none;
-  border-radius: 14px;
+  border-radius: 10px;
   background: none;
   font-family: var(--font-main);
   color: var(--text);
@@ -763,30 +765,42 @@ button:focus-visible, a:focus-visible {
 }
 .cal-day.is-selected .cal-day-num,
 .cal-day.is-selected.is-weekend .cal-day-num { color: #fff; }
-.cal-dots { display: flex; gap: 3px; height: 6px; }
-.cal-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--secondary);
-}
-.cal-day.is-selected .cal-dot { background: rgba(255, 255, 255, 0.85); }
 
-/* Непрерывная полоска под числом - весь охваченный многодневным
-   олимпиадным окном диапазон дней, не только день начала. На "своих"
-   крайних днях скруглена и чуть отступает от края ячейки, на днях
-   посередине окна - доходит до края, чтобы соседние ячейки одной недели
-   зрительно сливались в одну общую полосу. */
-.cal-span-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 4px;
-  height: 5px;
-  background: linear-gradient(90deg, var(--olympiad-edge), #ffcf5c);
+/* Дорожки с подписанными событиями под числами недели - растягиваются на
+   всю длину своего периода (grid-column/grid-row выставляются инлайново из
+   JS по результату packWeekLanes), ровно как в обычных календарях: видно
+   НАЗВАНИЕ прямо в сетке, не только то, что "что-то происходит". */
+.cal-week-lanes {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-top: 2px;
 }
-.cal-span-bar.start { left: 4px; border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-.cal-span-bar.end { right: 4px; border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.cal-bar {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+  border: none;
+  border-radius: 7px;
+  padding: 3px 6px;
+  font-family: var(--font-main);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.cal-bar.olympiad {
+  color: #4a2b00;
+  background: linear-gradient(90deg, #ffdc7a, var(--olympiad-edge));
+}
+.cal-bar.other {
+  color: var(--secondary);
+  background: var(--secondary-soft);
+}
+.cal-bar:active { opacity: 0.75; }
 
 .cal-legend {
   display: flex;
@@ -798,14 +812,15 @@ button:focus-visible, a:focus-visible {
   color: var(--hint);
   margin: 10px 0 2px;
 }
-.cal-legend-bar {
+.cal-legend-chip {
   display: inline-block;
-  width: 18px;
-  height: 5px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--olympiad-edge), #ffcf5c);
+  width: 14px;
+  height: 10px;
+  border-radius: 4px;
   vertical-align: middle;
 }
+.cal-legend-chip.olympiad { background: linear-gradient(90deg, #ffdc7a, var(--olympiad-edge)); }
+.cal-legend-chip.other { background: var(--secondary-soft); border: 1.5px solid var(--secondary); }
 
 .cal-day-detail { margin-top: 22px; }
 .cal-day-detail .date-heading { margin-top: 0; }

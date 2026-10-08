@@ -394,71 +394,66 @@ function bindDeadlineChips() {
   });
 }
 
-// Дни (включительно), которые покрывает многодневное олимпиадное окно
-// (регистрация/отборочный этап) - для каждого дня запоминаем, это начало,
-// середина или конец ЭТОГО конкретного окна (для скругления полоски в
-// сетке). Без этого разворачивания олимпиада с окном на 20 дней была бы
-// видна только в день начала - а остальные 19 дней выглядели бы пустыми,
-// хотя окно всё ещё открыто.
-function buildOlympiadSpans(events) {
-  const spanDays = new Map(); // dateStr -> { isStart, isEnd }
-  for (const e of events) {
-    if (!e.olympiad_url) continue;
-    const start = new Date(e.date + "T00:00:00");
-    const end = new Date((e.end_date || e.date) + "T00:00:00");
-    const totalDays = Math.round((end - start) / 86400000) + 1;
-    if (totalDays < 1 || totalDays > 120) continue; // защита от мусорных дат
-    for (let i = 0; i < totalDays; i++) {
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
-      const ds = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-      const entry = spanDays.get(ds) || { isStart: false, isEnd: false };
-      if (i === 0) entry.isStart = true;
-      if (i === totalDays - 1) entry.isEnd = true;
-      spanDays.set(ds, entry);
-    }
-  }
-  return spanDays;
-}
-
 // Сетка из 42 дней (6 недель), начиная с понедельника той недели, в которую
 // попадает 1-е число - дни соседних месяцев показываются приглушённо, но
 // тоже кликабельны (тап переключает на тот месяц). Если последняя неделя
 // целиком из чужого месяца - обрезаем её, чтобы сетка была компактнее.
-function buildMonthGrid(year, month, events, todayStr) {
+function buildMonthGrid(year, month, todayStr) {
   const firstOfMonth = new Date(year, month - 1, 1);
   const startOffset = (firstOfMonth.getDay() + 6) % 7;
   const gridStart = new Date(year, month - 1, 1 - startOffset);
-
-  const eventsByDate = {};
-  for (const e of events) {
-    (eventsByDate[e.date] = eventsByDate[e.date] || []).push(e);
-  }
-  const spanDays = buildOlympiadSpans(events);
 
   const cells = [];
   for (let i = 0; i < 42; i++) {
     const d = new Date(gridStart);
     d.setDate(gridStart.getDate() + i);
     const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    const dayEvents = eventsByDate[dateStr] || [];
-    const span = spanDays.get(dateStr);
     cells.push({
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
       day: d.getDate(),
       dateStr,
       inMonth: d.getMonth() + 1 === month && d.getFullYear() === year,
       isToday: dateStr === todayStr,
       isWeekend: d.getDay() === 0 || d.getDay() === 6,
-      hasOther: dayEvents.some((e) => !e.olympiad_url),
-      inOlympiadSpan: !!span,
-      spanStart: span ? span.isStart : false,
-      spanEnd: span ? span.isEnd : false,
     });
   }
   if (cells.slice(35).every((c) => !c.inMonth)) cells.length = 35;
   return cells;
+}
+
+// Раскладывает события одной недели по "дорожкам", как в обычных
+// календарях (Google Calendar и т.п.): непересекающиеся по дням события
+// делят одну дорожку, пересекающиеся расходятся по разным, чтобы полоски с
+// названиями не наезжали друг на друга. Даты в формате YYYY-MM-DD
+// сравниваются просто как строки - этот формат сортируется лексикографически
+// так же, как и по времени.
+function packWeekLanes(weekDates, events) {
+  const weekStart = weekDates[0];
+  const weekEnd = weekDates[6];
+  const items = [];
+  for (const e of events) {
+    const start = e.date;
+    const end = e.end_date || e.date;
+    if (end < weekStart || start > weekEnd) continue;
+    const clampedStart = start < weekStart ? weekStart : start;
+    const clampedEnd = end > weekEnd ? weekEnd : end;
+    const colStart = weekDates.indexOf(clampedStart);
+    const colEnd = weekDates.indexOf(clampedEnd);
+    if (colStart === -1 || colEnd === -1) continue;
+    items.push({ event: e, colStart, colEnd, dateStr: clampedStart });
+  }
+  items.sort((a, b) => a.colStart - b.colStart || (b.colEnd - b.colStart) - (a.colEnd - a.colStart));
+
+  const lanes = [];
+  for (const item of items) {
+    let laneIndex = lanes.findIndex((lane) => lane.every((b) => item.colStart > b.colEnd || item.colEnd < b.colStart));
+    if (laneIndex === -1) {
+      lanes.push([]);
+      laneIndex = lanes.length - 1;
+    }
+    lanes[laneIndex].push(item);
+    item.lane = laneIndex;
+  }
+  return { items, laneCount: lanes.length };
 }
 
 function renderCalendarHeader(year, month) {
@@ -471,31 +466,48 @@ function renderCalendarHeader(year, month) {
   `;
 }
 
-function renderCalendarGrid(cells, selectedDate) {
+// Показывает не абстрактные точки/полоски, а подписанные "плашки" событий
+// прямо в сетке - ровно как в привычных календарях (Google Calendar и
+// т.п.): название видно сразу, без тапа по дню. Многодневные олимпиадные
+// окна растягиваются на всю свою длину внутри недели.
+function renderCalendarGrid(cells, events, selectedDate) {
   const head = WEEKDAYS_SHORT.map((w, i) => `<div class="cal-weekday${i >= 5 ? " is-weekend" : ""}">${w}</div>`).join("");
-  const days = cells.map((c) => {
-    const classes = ["cal-day"];
-    if (!c.inMonth) classes.push("is-outside");
-    if (c.isToday) classes.push("is-today");
-    if (c.isWeekend) classes.push("is-weekend");
-    if (c.dateStr === selectedDate) classes.push("is-selected");
-    const otherDot = c.hasOther ? '<span class="cal-dot"></span>' : "";
-    const barClasses = ["cal-span-bar"];
-    if (c.spanStart) barClasses.push("start");
-    if (c.spanEnd) barClasses.push("end");
-    const spanBar = c.inOlympiadSpan ? `<span class="${barClasses.join(" ")}"></span>` : "";
-    return `<button type="button" class="${classes.join(" ")}" data-date="${c.dateStr}">
-      <span class="cal-day-num">${c.day}</span>
-      <span class="cal-dots">${otherDot}</span>
-      ${spanBar}
-    </button>`;
-  }).join("");
+
+  const weeksHtml = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    const weekCells = cells.slice(i, i + 7);
+    const weekDates = weekCells.map((c) => c.dateStr);
+
+    const daysHtml = weekCells.map((c) => {
+      const classes = ["cal-day"];
+      if (!c.inMonth) classes.push("is-outside");
+      if (c.isToday) classes.push("is-today");
+      if (c.isWeekend) classes.push("is-weekend");
+      if (c.dateStr === selectedDate) classes.push("is-selected");
+      return `<button type="button" class="${classes.join(" ")}" data-date="${c.dateStr}"><span class="cal-day-num">${c.day}</span></button>`;
+    }).join("");
+
+    const { items, laneCount } = packWeekLanes(weekDates, events);
+    const barsHtml = items.map((it) => {
+      const kind = it.event.olympiad_url ? "olympiad" : "other";
+      const icon = kind === "olympiad" ? "🏅 " : "";
+      const span = it.colEnd - it.colStart + 1;
+      const style = `grid-column:${it.colStart + 1} / span ${span}; grid-row:${it.lane + 1};`;
+      return `<button type="button" class="cal-bar ${kind}" style="${style}" data-date="${it.dateStr}">${icon}${escapeHtml(it.event.summary)}</button>`;
+    }).join("");
+    const lanesHtml = laneCount
+      ? `<div class="cal-week-lanes" style="grid-template-rows: repeat(${laneCount}, auto);">${barsHtml}</div>`
+      : "";
+
+    weeksHtml.push(`<div class="cal-week"><div class="cal-week-days">${daysHtml}</div>${lanesHtml}</div>`);
+  }
+
   return `
     <div class="cal-grid">
       <div class="cal-weekdays">${head}</div>
-      <div class="cal-days">${days}</div>
+      ${weeksHtml.join("")}
     </div>
-    <div class="cal-legend"><span class="cal-legend-bar"></span> период олимпиады &nbsp;&nbsp; <span class="cal-dot"></span> другое событие</div>
+    <div class="cal-legend"><span class="cal-legend-chip olympiad"></span> олимпиада &nbsp;&nbsp; <span class="cal-legend-chip other"></span> другое событие</div>
   `;
 }
 
@@ -563,7 +575,7 @@ async function loadCalendarMonth() {
 
 function renderCalendarView() {
   const { year, month, events, selectedDate, today, deadlines } = calendarState;
-  const cells = buildMonthGrid(year, month, events, today);
+  const cells = buildMonthGrid(year, month, today);
   const dayEvents = dayDetailEvents(events, selectedDate);
   const olympiadTotal = events.filter((e) => e.olympiad_url).length;
   setSubtitle(`${events.length} ${pluralEvents(events.length)} за месяц` + (olympiadTotal ? ` · ${olympiadTotal} олимпиад` : ""));
@@ -571,7 +583,7 @@ function renderCalendarView() {
   content.innerHTML =
     renderDeadlines(deadlines) +
     renderCalendarHeader(year, month) +
-    renderCalendarGrid(cells, selectedDate) +
+    renderCalendarGrid(cells, events, selectedDate) +
     `<div class="cal-day-detail">
       <div class="date-heading">${dateHeading(selectedDate)}</div>
       ${renderEventList(dayEvents, { emptyEmoji: "🌸", emptyText: "Событий нет", showDelete: STATE.is_admin, showHide: true })}
@@ -579,7 +591,7 @@ function renderCalendarView() {
 
   bindCalendarNav();
   bindDeadlineChips();
-  content.querySelectorAll(".cal-day").forEach((btn) => {
+  content.querySelectorAll(".cal-day, .cal-bar").forEach((btn) => {
     btn.onclick = () => {
       haptic("light");
       const d = btn.dataset.date;
