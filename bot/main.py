@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import BotCommand, BotCommandScopeChat, MenuButtonWebApp, WebAppInfo
@@ -12,7 +11,6 @@ from .config import Settings, load_settings
 from .database import Database
 from .digest import send_daily_digest
 from .google_calendar import GoogleCalendarClient
-from .olympiad_watch import check_olympiads_job
 from .reminders import check_reminders
 from .runtime_config import Defaults, RuntimeConfig
 from .schedule_sync import sync_schedule_job
@@ -33,7 +31,7 @@ BASE_COMMANDS = [
     BotCommand("hide_event", "Скрыть событие только у себя"),
     BotCommand("hidden_events", "Вернуть то, что вы скрыли"),
     BotCommand("status", "Текущие настройки и статус подписки"),
-    BotCommand("olympiads", "Список отслеживаемых олимпиад"),
+    BotCommand("olympiads", "Список известных олимпиад"),
     BotCommand("whoami", "Узнать свой chat_id"),
     BotCommand("help", "Справка"),
 ]
@@ -48,7 +46,6 @@ ADMIN_EXTRA_COMMANDS = [
     BotCommand("set_timezone", "Часовой пояс"),
     BotCommand("set_digest_time", "Время ежедневной сводки"),
     BotCommand("delete_event", "Удалить событие из календаря"),
-    BotCommand("check_olympiads", "Проверить олимпиады сейчас"),
 ]
 
 
@@ -159,7 +156,6 @@ def main() -> None:
     application.add_handler(CommandHandler("hide_event", handlers.hide_event_command))
     application.add_handler(CommandHandler("hidden_events", handlers.hidden_events_command))
     application.add_handler(CommandHandler("olympiads", handlers.olympiads_command))
-    application.add_handler(CommandHandler("check_olympiads", handlers.check_olympiads_command))
     application.add_handler(CallbackQueryHandler(handlers.handle_delete_pick, pattern=r"^delpick:"))
     application.add_handler(
         CallbackQueryHandler(handlers.handle_delete_confirm, pattern=r"^delconfirm:")
@@ -187,13 +183,6 @@ def main() -> None:
     application.bot_data["_last_digest_key"] = (
         runtime_config.daily_digest_time,
         runtime_config.timezone,
-    )
-
-    application.job_queue.run_repeating(
-        check_olympiads_job,
-        interval=timedelta(hours=24),
-        first=60,
-        name="check_olympiads",
     )
 
     application.job_queue.run_repeating(

@@ -1,6 +1,6 @@
 import sqlite3
 from contextlib import closing
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set
 
 
 class Database:
@@ -48,16 +48,6 @@ class Database:
             )
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS olympiad_watch (
-                    key TEXT PRIMARY KEY,
-                    content_hash TEXT NOT NULL,
-                    last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    last_changed_at TEXT
-                )
-                """
-            )
-            conn.execute(
-                """
                 CREATE TABLE IF NOT EXISTS hidden_events (
                     chat_id INTEGER NOT NULL,
                     event_id TEXT NOT NULL,
@@ -68,12 +58,10 @@ class Database:
             )
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS olympiad_events (
+                CREATE TABLE IF NOT EXISTS completed_events (
                     event_id TEXT PRIMARY KEY,
-                    source_key TEXT NOT NULL,
-                    start_date TEXT NOT NULL,
-                    end_date TEXT NOT NULL,
-                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    completed_by_chat_id INTEGER
                 )
                 """
             )
@@ -151,78 +139,6 @@ class Database:
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
             )
 
-    def get_olympiad_state(self, key: str) -> Optional[Tuple[str, Optional[str]]]:
-        """Возвращает (content_hash, last_changed_at) или None, если ещё не проверялось."""
-        with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT content_hash, last_changed_at FROM olympiad_watch WHERE key = ?",
-                (key,),
-            ).fetchone()
-            return (row[0], row[1]) if row else None
-
-    def save_olympiad_check(self, key: str, content_hash: str, changed: bool) -> None:
-        with closing(self._connect()) as conn, conn:
-            if changed:
-                conn.execute(
-                    """
-                    INSERT INTO olympiad_watch (key, content_hash, last_checked_at, last_changed_at)
-                    VALUES (?, ?, datetime('now'), datetime('now'))
-                    ON CONFLICT(key) DO UPDATE SET
-                        content_hash = excluded.content_hash,
-                        last_checked_at = excluded.last_checked_at,
-                        last_changed_at = excluded.last_changed_at
-                    """,
-                    (key, content_hash),
-                )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO olympiad_watch (key, content_hash, last_checked_at)
-                    VALUES (?, ?, datetime('now'))
-                    ON CONFLICT(key) DO UPDATE SET
-                        content_hash = excluded.content_hash,
-                        last_checked_at = excluded.last_checked_at
-                    """,
-                    (key, content_hash),
-                )
-
-    def get_olympiad_event_dates(self, event_id: str) -> Optional[Tuple[str, str]]:
-        """Возвращает (start_date, end_date) в ISO, если это событие уже
-        заводили раньше, иначе None (значит, оно новое)."""
-        with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT start_date, end_date FROM olympiad_events WHERE event_id = ?",
-                (event_id,),
-            ).fetchone()
-            return (row[0], row[1]) if row else None
-
-    def save_olympiad_event(
-        self, event_id: str, source_key: str, start_date: str, end_date: str
-    ) -> None:
-        with closing(self._connect()) as conn, conn:
-            conn.execute(
-                """
-                INSERT INTO olympiad_events (event_id, source_key, start_date, end_date, updated_at)
-                VALUES (?, ?, ?, ?, datetime('now'))
-                ON CONFLICT(event_id) DO UPDATE SET
-                    start_date = excluded.start_date,
-                    end_date = excluded.end_date,
-                    updated_at = excluded.updated_at
-                """,
-                (event_id, source_key, start_date, end_date),
-            )
-
-    def has_upcoming_olympiad_event(self, source_key: str, today_iso: str) -> bool:
-        """Есть ли у этого источника хотя бы одно уже заведённое в календарь
-        событие, которое ещё не закончилось - если да, страницу пересматривать
-        рано, мы уже знаем актуальную дату."""
-        with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT 1 FROM olympiad_events WHERE source_key = ? AND end_date > ? LIMIT 1",
-                (source_key, today_iso),
-            ).fetchone()
-            return row is not None
-
     def hide_event_for_chat(self, chat_id: int, event_id: str) -> None:
         """Скрывает событие только для этого chat_id - само событие в
         Google Calendar не трогается, остальные подписчики видят его как
@@ -254,4 +170,39 @@ class Database:
             rows = conn.execute(
                 "SELECT event_id FROM hidden_events WHERE chat_id = ?", (chat_id,)
             ).fetchall()
+            return {row[0] for row in rows}
+
+    def mark_event_completed(self, event_id: str, chat_id: int) -> None:
+        """Отмечает олимпиаду выполненной - это общий, а не персональный
+        признак (в отличие от hidden_events): раз зарегистрировались, это
+        факт для всей семьи, а не только для того, кто нажал кнопку."""
+        with closing(self._connect()) as conn, conn:
+            conn.execute(
+                """
+                INSERT INTO completed_events (event_id, completed_by_chat_id)
+                VALUES (?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    completed_at = datetime('now'),
+                    completed_by_chat_id = excluded.completed_by_chat_id
+                """,
+                (event_id, chat_id),
+            )
+
+    def unmark_event_completed(self, event_id: str) -> bool:
+        with closing(self._connect()) as conn, conn:
+            cur = conn.execute(
+                "DELETE FROM completed_events WHERE event_id = ?", (event_id,)
+            )
+            return cur.rowcount > 0
+
+    def is_event_completed(self, event_id: str) -> bool:
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM completed_events WHERE event_id = ?", (event_id,)
+            ).fetchone()
+            return row is not None
+
+    def get_completed_event_ids(self) -> Set[str]:
+        with closing(self._connect()) as conn:
+            rows = conn.execute("SELECT event_id FROM completed_events").fetchall()
             return {row[0] for row in rows}

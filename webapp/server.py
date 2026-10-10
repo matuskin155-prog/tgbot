@@ -12,8 +12,7 @@ from bot.config import Settings, load_settings
 from bot.database import Database
 from bot.formatting import event_end_date, format_time_range, is_event_ongoing
 from bot.google_calendar import CalendarEvent, GoogleCalendarClient
-from bot.olympiad_watch import check_olympiad_sources
-from bot.olympiads import TRACKED_SOURCES, olympiad_url_for
+from bot.olympiads import SOURCES, olympiad_url_for
 from bot.runtime_config import ConfigError, Defaults, RuntimeConfig
 
 from .auth import InitDataError, validate_init_data
@@ -96,11 +95,13 @@ def _serialize_events(
 ) -> list:
     runtime: RuntimeConfig = request.app["runtime_config"]
     tz = ZoneInfo(runtime.timezone)
+    db: Database = request.app["db"]
 
     if exclude_hidden_for is not None:
-        db: Database = request.app["db"]
         hidden = db.get_hidden_event_ids_for_chat(exclude_hidden_for)
         events = [e for e in events if e.id not in hidden]
+
+    completed_ids = db.get_completed_event_ids()
 
     return [
         {
@@ -115,6 +116,7 @@ def _serialize_events(
             "start_ts": event.start.isoformat(),
             "html_link": event.html_link,
             "olympiad_url": olympiad_url_for(event),
+            "is_completed": event.id in completed_ids,
         }
         for event in events
     ]
@@ -303,6 +305,36 @@ async def handle_hidden_events(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+async def handle_events_complete(request: web.Request) -> web.Response:
+    # Доступно любому подписчику, не только админу - "выполнено" (например,
+    # уже зарегистрировались на олимпиаду) это общий факт для всей семьи,
+    # а не личная настройка показа (в отличие от hide выше), поэтому его
+    # видят и перестают получать по нему напоминания все подписчики.
+    auth = _require_auth(request)
+    try:
+        body = await request.json()
+        event_id = body["event_id"]
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
+
+    db: Database = request.app["db"]
+    db.mark_event_completed(event_id, auth["chat_id"])
+    return web.json_response({"ok": True})
+
+
+async def handle_events_uncomplete(request: web.Request) -> web.Response:
+    auth = _require_auth(request)
+    try:
+        body = await request.json()
+        event_id = body["event_id"]
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
+
+    db: Database = request.app["db"]
+    db.unmark_event_completed(event_id)
+    return web.json_response({"ok": True})
+
+
 async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
     """Ближайшие по времени олимпиадные события (с датой начала или конца
     регистрации/отборочного этапа) для панели "Ближайшие дедлайны" на
@@ -316,56 +348,16 @@ async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
     except Exception:
         logger.exception("Не удалось получить ближайшие дедлайны олимпиад")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
-    olympiad_events = [e for e in events if e["olympiad_url"]][:OLYMPIAD_DEADLINES_LIMIT]
+    olympiad_events = [
+        e for e in events if e["olympiad_url"] and not e["is_completed"]
+    ][:OLYMPIAD_DEADLINES_LIMIT]
     return web.json_response(olympiad_events)
 
 
 async def handle_olympiads(request: web.Request) -> web.Response:
     _require_auth(request)
-    db: Database = request.app["db"]
-    result = []
-    for source in TRACKED_SOURCES:
-        state = db.get_olympiad_state(source.key)
-        result.append(
-            {
-                "key": source.key,
-                "name": source.name,
-                "url": source.url,
-                "changed": bool(state and state[1]),
-            }
-        )
-    return web.json_response(result)
-
-
-async def handle_olympiads_check(request: web.Request) -> web.Response:
-    auth = _require_auth(request)
-    _require_admin(auth)
-    settings: Settings = request.app["settings"]
-    db: Database = request.app["db"]
-    calendar: GoogleCalendarClient = request.app["calendar"]
-    runtime: RuntimeConfig = request.app["runtime_config"]
-    try:
-        result = await check_olympiad_sources(
-            db, calendar, runtime.calendar_id, settings.browser_executable_path
-        )
-    except Exception as exc:
-        logger.exception("Не удалось проверить страницы олимпиад")
-        raise web.HTTPInternalServerError(text="Не получилось проверить страницы") from exc
     return web.json_response(
-        {
-            "changed": [{"name": s.name, "url": s.url} for s in result.changed],
-            "added_events": [
-                {
-                    "name": e.source.name,
-                    "url": e.source.url,
-                    "is_new": e.is_new,
-                    "start_date": e.start_date,
-                    "end_date": e.end_date,
-                    "label": e.label,
-                }
-                for e in result.added_events
-            ],
-        }
+        [{"key": source.key, "name": source.name, "url": source.url} for source in SOURCES]
     )
 
 
@@ -440,10 +432,11 @@ def create_app() -> web.Application:
     app.router.add_post("/api/events/delete", handle_events_delete)
     app.router.add_post("/api/events/hide", handle_events_hide)
     app.router.add_post("/api/events/unhide", handle_events_unhide)
+    app.router.add_post("/api/events/complete", handle_events_complete)
+    app.router.add_post("/api/events/uncomplete", handle_events_uncomplete)
     app.router.add_get("/api/hidden_events", handle_hidden_events)
     app.router.add_get("/api/olympiads/deadlines", handle_olympiad_deadlines)
     app.router.add_get("/api/olympiads", handle_olympiads)
-    app.router.add_post("/api/olympiads/check", handle_olympiads_check)
     app.router.add_post("/api/config", handle_config_update)
     app.router.add_static("/static/", STATIC_DIR, name="static")
     app.router.add_get("/", handle_index)

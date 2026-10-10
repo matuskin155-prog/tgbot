@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
@@ -22,8 +21,8 @@ class CalendarEvent:
     html_link: Optional[str]
     all_day: bool
     # Собственные метаданные бота (extendedProperties.private в Google
-    # Calendar) - например, olympiad_url у событий, автозаведённых по
-    # олимпиадам (см. bot/olympiad_watch.py). Обычных событий не касается.
+    # Calendar), если на событии такие вообще когда-либо были выставлены
+    # вручную - большинство событий этого не имеют.
     extended_properties: Dict[str, str] = field(default_factory=dict)
 
 
@@ -71,45 +70,6 @@ class GoogleCalendarClient:
     def delete_event(self, event_id: str, calendar_id: str) -> None:
         with self._lock:
             self._service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
-
-    def upsert_event(
-        self,
-        event_id: str,
-        calendar_id: str,
-        summary: str,
-        description: str,
-        start_date: date,
-        end_date: date,
-        extended_properties: Optional[Dict[str, str]] = None,
-    ) -> None:
-        """Создаёт all-day событие с заданным id, либо обновляет его, если
-        событие с таким id уже есть (используется для автодобавления
-        олимпиад — event_id стабилен между проверками, повторный вызов
-        с тем же id не создаёт дубликат, а актуализирует даты/описание).
-
-        extended_properties — произвольные строковые метаданные бота
-        (например, ссылка на сайт-первоисточник), не показываются в самом
-        Google Calendar, но возвращаются обратно через API."""
-        body = {
-            "summary": summary,
-            "description": description,
-            "start": {"date": start_date.isoformat()},
-            "end": {"date": end_date.isoformat()},
-        }
-        if extended_properties:
-            body["extendedProperties"] = {"private": extended_properties}
-        with self._lock:
-            try:
-                self._service.events().insert(
-                    calendarId=calendar_id, body={**body, "id": event_id}
-                ).execute()
-            except HttpError as exc:
-                if exc.resp.status == 409:
-                    self._service.events().update(
-                        calendarId=calendar_id, eventId=event_id, body=body
-                    ).execute()
-                else:
-                    raise
 
     def _list_events(
         self, time_min: datetime, time_max: datetime, calendar_id: str

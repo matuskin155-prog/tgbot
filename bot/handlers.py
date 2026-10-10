@@ -12,8 +12,7 @@ from .database import Database
 from .digest import send_daily_digest
 from .formatting import format_event_line, format_time_range
 from .google_calendar import GoogleCalendarClient
-from .olympiad_watch import check_olympiad_sources
-from .olympiads import TRACKED_SOURCES
+from .olympiads import SOURCES
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
 
@@ -32,7 +31,7 @@ WELCOME_TEXT = (
     "/hidden_events — вернуть то, что вы скрыли\n"
     "/status — текущие настройки\n"
     "/whoami — узнать свой chat_id\n"
-    "/olympiads — список отслеживаемых олимпиад\n\n"
+    "/olympiads — список известных олимпиад\n\n"
     "Каждый день в заданное время я также присылаю сводку событий на сегодня "
     "всем, кто подписан (/status покажет, во сколько)."
 )
@@ -48,8 +47,7 @@ ADMIN_HELP_TEXT = (
     "/set_interval <секунды> — как часто опрашивать календарь\n"
     "/set_timezone <Europe/Moscow> — часовой пояс\n"
     "/set_digest_time <ЧЧ:ММ> — время ежедневной сводки\n"
-    "/delete_event — удалить событие из календаря\n"
-    "/check_olympiads — проверить страницы олимпиад прямо сейчас"
+    "/delete_event — удалить событие из календаря"
 )
 
 DELETE_WINDOW_DAYS = 30
@@ -585,62 +583,13 @@ async def handle_unhide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.edit_message_text("Возвращено — снова будет показываться и напоминать.")
 
 
-# --- Слежение за страницами олимпиад ---
+# --- Справочник сайтов олимпиад ---
 
 
 async def olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    db: Database = context.bot_data["db"]
-    lines = ["<b>Отслеживаемые олимпиады:</b>"]
-    for source in TRACKED_SOURCES:
-        state = db.get_olympiad_state(source.key)
-        marker = " 🔔" if state and state[1] else ""
-        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>{marker}')
-    lines.append("\n🔔 — на странице недавно были изменения, стоит проверить вручную.")
-    await update.effective_message.reply_text(
-        "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
-    )
-
-
-async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _require_admin(update, context):
-        return
-
-    db: Database = context.bot_data["db"]
-    settings: Settings = context.bot_data["settings"]
-    calendar: GoogleCalendarClient = context.bot_data["calendar"]
-    runtime: RuntimeConfig = context.bot_data["runtime_config"]
-    await update.effective_message.reply_text(
-        f"Проверяю {len(TRACKED_SOURCES)} страниц через браузер, это может занять минуту..."
-    )
-
-    try:
-        result = await check_olympiad_sources(
-            db, calendar, runtime.calendar_id, settings.browser_executable_path
-        )
-    except Exception:
-        logger.exception("Не удалось проверить страницы олимпиад")
-        await update.effective_message.reply_text("Не получилось проверить страницы 😕")
-        return
-
-    if not result.changed and not result.added_events:
-        await update.effective_message.reply_text("Изменений с прошлой проверки не найдено.")
-        return
-
-    lines = []
-    if result.added_events:
-        lines.append("Автоматически добавлены/обновлены в календаре:")
-        for event in result.added_events:
-            mark = "новое" if event.is_new else "дата изменилась"
-            label_suffix = f" — {escape(event.label)}" if event.label else ""
-            lines.append(
-                f'• <a href="{event.source.url}">{escape(event.source.name)}</a>{label_suffix} '
-                f"({mark}): {event.start_date}"
-            )
-        lines.append("")
-    if result.changed:
-        lines.append("Изменились:")
-        for source in result.changed:
-            lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
+    lines = ["<b>Известные олимпиады:</b>"]
+    for source in SOURCES:
+        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )

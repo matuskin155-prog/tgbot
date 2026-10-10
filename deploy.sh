@@ -19,20 +19,9 @@ fi
 cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 
-echo "=== 1/5: системные пакеты (python3, venv, Google Chrome) ==="
+echo "=== 1/5: системные пакеты (python3, venv) ==="
 apt-get update
-apt-get install -y python3 python3-venv python3-pip wget
-
-# На Ubuntu пакет chromium — это пересадочная заглушка на snap, и без
-# рабочего snapd (обычная ситуация на серверах) браузер фактически не
-# ставится, хотя apt отчитывается об успехе. Google Chrome ставится как
-# обычный .deb и работает одинаково надёжно на Debian и Ubuntu.
-if [ ! -x /usr/bin/google-chrome ]; then
-    TMP_DEB="$(mktemp --suffix=.deb)"
-    wget -q -O "$TMP_DEB" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-    apt-get install -y "$TMP_DEB"
-    rm -f "$TMP_DEB"
-fi
+apt-get install -y python3 python3-venv python3-pip
 
 echo "=== 2/5: виртуальное окружение и зависимости ==="
 if [ ! -d .venv ]; then
@@ -54,18 +43,6 @@ if [ ! -f service_account.json ]; then
     echo "Не найден service_account.json в $PROJECT_DIR — положите его сюда"
     echo "(через WinSCP) и запустите скрипт ещё раз."
     exit 1
-fi
-
-# Всегда указываем на Chrome, который только что поставили выше (а не
-# только при первом запуске) — если тут раньше оказался путь к
-# несработавшему chromium, этот прогон его исправит.
-BROWSER_PATH="$(command -v google-chrome || true)"
-if [ -n "$BROWSER_PATH" ]; then
-    if grep -q "^BROWSER_EXECUTABLE_PATH=.*$" .env 2>/dev/null; then
-        sed -i "s|^BROWSER_EXECUTABLE_PATH=.*$|BROWSER_EXECUTABLE_PATH=$BROWSER_PATH|" .env
-    else
-        echo "BROWSER_EXECUTABLE_PATH=$BROWSER_PATH" >> .env
-    fi
 fi
 
 echo "=== 3/5: systemd-автозапуск бота ==="
