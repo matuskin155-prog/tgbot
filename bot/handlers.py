@@ -12,7 +12,7 @@ from .database import Database
 from .digest import send_daily_digest
 from .formatting import format_event_line, format_time_range
 from .google_calendar import GoogleCalendarClient
-from .olympiad_watch import check_olympiad_sources
+from .olympiad_watch import check_olympiad_sources, format_check_problems
 from .olympiads import TRACKED_SOURCES
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
@@ -622,7 +622,8 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
         await update.effective_message.reply_text("Не получилось проверить страницы 😕")
         return
 
-    if not result.changed and not result.added_events:
+    problem_lines = format_check_problems(result)
+    if not result.changed and not result.added_events and not problem_lines:
         await update.effective_message.reply_text("Изменений с прошлой проверки не найдено.")
         return
 
@@ -641,6 +642,8 @@ async def check_olympiads_command(update: Update, context: ContextTypes.DEFAULT_
         lines.append("Изменились:")
         for source in result.changed:
             lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
+        lines.append("")
+    lines.extend(problem_lines)
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )
