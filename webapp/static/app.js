@@ -163,7 +163,11 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
   const calLink = !tappable && e.html_link
     ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Google Calendar</button>`
     : "";
-  const deleteBtn = !tappable && showDelete
+  // На олимпиадных карточках кнопку намеренно не показываем - там и так
+  // много действий (сайт, дедлайн, скрыть), а удалить событие при
+  // необходимости всё ещё можно через "Ещё" → "Удалить событие из
+  // календаря".
+  const deleteBtn = !tappable && showDelete && !e.olympiad_url
     ? `<button class="delete-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🗑 Удалить</button>`
     : "";
   // "Скрыть у себя" доступно ЛЮБОМУ подписчику (не только админу) - событие
