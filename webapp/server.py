@@ -95,13 +95,11 @@ def _serialize_events(
 ) -> list:
     runtime: RuntimeConfig = request.app["runtime_config"]
     tz = ZoneInfo(runtime.timezone)
-    db: Database = request.app["db"]
 
     if exclude_hidden_for is not None:
+        db: Database = request.app["db"]
         hidden = db.get_hidden_event_ids_for_chat(exclude_hidden_for)
         events = [e for e in events if e.id not in hidden]
-
-    completed_ids = db.get_completed_event_ids()
 
     return [
         {
@@ -114,9 +112,7 @@ def _serialize_events(
             "is_ongoing": is_event_ongoing(event),
             "all_day": event.all_day,
             "start_ts": event.start.isoformat(),
-            "html_link": event.html_link,
             "olympiad_url": olympiad_url_for(event),
-            "is_completed": event.id in completed_ids,
         }
         for event in events
     ]
@@ -305,40 +301,10 @@ async def handle_hidden_events(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
-async def handle_events_complete(request: web.Request) -> web.Response:
-    # Доступно любому подписчику, не только админу - "выполнено" (например,
-    # уже зарегистрировались на олимпиаду) это общий факт для всей семьи,
-    # а не личная настройка показа (в отличие от hide выше), поэтому его
-    # видят и перестают получать по нему напоминания все подписчики.
-    auth = _require_auth(request)
-    try:
-        body = await request.json()
-        event_id = body["event_id"]
-    except Exception as exc:
-        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
-
-    db: Database = request.app["db"]
-    db.mark_event_completed(event_id, auth["chat_id"])
-    return web.json_response({"ok": True})
-
-
-async def handle_events_uncomplete(request: web.Request) -> web.Response:
-    auth = _require_auth(request)
-    try:
-        body = await request.json()
-        event_id = body["event_id"]
-    except Exception as exc:
-        raise web.HTTPBadRequest(text="Нужно поле event_id") from exc
-
-    db: Database = request.app["db"]
-    db.unmark_event_completed(event_id)
-    return web.json_response({"ok": True})
-
-
 async def _upcoming_olympiad_events(request: web.Request, chat_id: int) -> list:
     """Распознанные олимпиадные события из календаря на
     OLYMPIAD_DEADLINES_WINDOW_DAYS вперёд - общая выборка для вкладки
-    "Олимпиады" (все) и панели "Ближайшие дедлайны" (топ, без выполненных)."""
+    "Олимпиады" (все) и панели "Ближайшие дедлайны" (только первые)."""
     events = await _events_payload(
         request, OLYMPIAD_DEADLINES_WINDOW_DAYS * 24, exclude_hidden_for=chat_id
     )
@@ -356,15 +322,13 @@ async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
     except Exception:
         logger.exception("Не удалось получить ближайшие дедлайны олимпиад")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
-    olympiad_events = [e for e in olympiad_events if not e["is_completed"]][:OLYMPIAD_DEADLINES_LIMIT]
-    return web.json_response(olympiad_events)
+    return web.json_response(olympiad_events[:OLYMPIAD_DEADLINES_LIMIT])
 
 
 async def handle_olympiads(request: web.Request) -> web.Response:
-    """Все распознанные олимпиадные события из календаря (включая уже
-    отмеченные выполненными) для вкладки "Олимпиады" - в отличие от панели
-    дедлайнов на вкладке "Календарь", это полный список, а не только
-    ближайшее и ещё не выполненное."""
+    """Все распознанные олимпиадные события из календаря для вкладки
+    "Олимпиады" - в отличие от панели дедлайнов на вкладке "Календарь",
+    это полный список, а не только ближайшие несколько."""
     auth = _require_auth(request)
     try:
         olympiad_events = await _upcoming_olympiad_events(request, auth["chat_id"])
@@ -445,8 +409,6 @@ def create_app() -> web.Application:
     app.router.add_post("/api/events/delete", handle_events_delete)
     app.router.add_post("/api/events/hide", handle_events_hide)
     app.router.add_post("/api/events/unhide", handle_events_unhide)
-    app.router.add_post("/api/events/complete", handle_events_complete)
-    app.router.add_post("/api/events/uncomplete", handle_events_uncomplete)
     app.router.add_get("/api/hidden_events", handle_hidden_events)
     app.router.add_get("/api/olympiads/deadlines", handle_olympiad_deadlines)
     app.router.add_get("/api/olympiads", handle_olympiads)

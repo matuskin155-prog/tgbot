@@ -30,9 +30,6 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
     # Подписчик мог лично скрыть у себя какое-то событие (не трогая сам
     # календарь) - такому chat_id напоминания по нему больше не шлём.
     hidden_by_chat = {chat_id: db.get_hidden_event_ids_for_chat(chat_id) for chat_id in subscribers}
-    # Олимпиаду могли уже отметить выполненной (зарегистрировались) - это
-    # общий признак для всех, в отличие от hidden_by_chat выше.
-    completed_ids = db.get_completed_event_ids()
 
     try:
         events = await asyncio.to_thread(
@@ -78,7 +75,7 @@ async def check_reminders(context: ContextTypes.DEFAULT_TYPE) -> None:
         # НАЧАЛА события в минутах - для многодневного all-day окна это почти
         # бесполезно (сработает один раз в момент открытия, а не когда
         # дедлайн уже близко). Здесь же считаем от КОНЦА события в днях.
-        if event.all_day and event.id not in completed_ids:
+        if event.all_day:
             url = olympiad_url_for(event)
             if url:
                 end_date = event_end_date(event, tz)

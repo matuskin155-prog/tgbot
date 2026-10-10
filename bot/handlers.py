@@ -615,8 +615,7 @@ async def olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not url:
             continue
         when = format_time_range(event, tz)
-        mark = " ✅" if db.is_event_completed(event.id) else ""
-        lines.append(f'• {when} — <a href="{url}">{escape(event.summary)}</a>{mark}')
+        lines.append(f'• {when} — <a href="{url}">{escape(event.summary)}</a>')
 
     if len(lines) == 1:
         await update.effective_message.reply_text(

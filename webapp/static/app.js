@@ -140,13 +140,8 @@ async function fetchMonthSummary() {
 function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const olympiadClass = e.olympiad_url ? "is-olympiad" : "";
-  const completedClass = e.is_completed ? "is-completed" : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
-  const olympiadBadge = e.olympiad_url
-    ? (e.is_completed
-        ? '<span class="olympiad-badge is-done">✅ выполнено</span>'
-        : '<span class="olympiad-badge">🏅 олимпиада</span>')
-    : "";
+  const olympiadBadge = e.olympiad_url ? '<span class="olympiad-badge">🏅 олимпиада</span>' : "";
   const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
   const countdownBadge = countdown
     ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
@@ -160,13 +155,9 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
   const olympiadLink = !tappable && e.olympiad_url
     ? `<button class="olympiad-link-btn" data-link="${escapeHtml(e.olympiad_url)}">🏅 Сайт олимпиады</button>`
     : "";
-  const calLink = !tappable && e.html_link
-    ? `<button class="cal-link" data-link="${escapeHtml(e.html_link)}">🔗 Google Calendar</button>`
-    : "";
   // На олимпиадных карточках кнопку намеренно не показываем - там и так
-  // много действий (сайт, дедлайн, скрыть), а удалить событие при
-  // необходимости всё ещё можно через "Ещё" → "Удалить событие из
-  // календаря".
+  // много действий (сайт, скрыть), а удалить событие при необходимости
+  // всё ещё можно через "Ещё" → "Удалить событие из календаря".
   const deleteBtn = !tappable && showDelete && !e.olympiad_url
     ? `<button class="delete-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🗑 Удалить</button>`
     : "";
@@ -175,19 +166,11 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
   const hideBtn = !tappable && showHide
     ? `<button class="hide-btn" data-id="${escapeHtml(e.id)}" data-summary="${escapeHtml(e.summary)}">🙈 Скрыть у себя</button>`
     : "";
-  // "Отметить выполненным" - общий (не личный) признак, доступен любому
-  // подписчику: как только кто-то в семье зарегистрировался на олимпиаду,
-  // напоминания о её дедлайне больше не нужны никому.
-  const completeBtn = !tappable && e.olympiad_url
-    ? (e.is_completed
-        ? `<button class="complete-btn is-done" data-id="${escapeHtml(e.id)}">↩️ Вернуть в активные</button>`
-        : `<button class="complete-btn" data-id="${escapeHtml(e.id)}">✅ Отметить выполненным</button>`)
-    : "";
-  const actionsRow = olympiadLink || calLink || deleteBtn || hideBtn || completeBtn
-    ? `<div class="row-actions">${olympiadLink}${calLink}${completeBtn}${hideBtn}${deleteBtn}</div>`
+  const actionsRow = olympiadLink || deleteBtn || hideBtn
+    ? `<div class="row-actions">${olympiadLink}${hideBtn}${deleteBtn}</div>`
     : "";
   return `
-    <div class="card ${liveClass} ${olympiadClass} ${completedClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
+    <div class="card ${liveClass} ${olympiadClass} ${tappable ? "tappable" : ""}" style="--i:${index}" ${tappable ? `data-id="${escapeHtml(e.id)}"` : ""}>
       <div class="row-top">
         <span class="time">${escapeHtml(e.when)}</span>
         ${liveBadge}
@@ -239,28 +222,11 @@ function confirmHide(eventId, summary, onDone) {
   });
 }
 
-// В отличие от скрытия - не разрушительное и мгновенно обратимое действие
-// (кнопка сама превращается в "Вернуть в активные"), поэтому без
-// showConfirm - лишний диалог тут только мешал бы.
-async function toggleComplete(eventId, isCompleted, onDone) {
-  try {
-    await api(isCompleted ? "/api/events/uncomplete" : "/api/events/complete", {
-      method: "POST",
-      body: JSON.stringify({ event_id: eventId }),
-    });
-    hapticNotify("success");
-  } catch (e) {
-    hapticNotify("error");
-    tg.showAlert("Ошибка: " + e.message);
-  }
-  if (onDone) onDone();
-}
-
-// Вешает обработчики на кнопки "открыть в Google Calendar", "скрыть",
-// "выполнено" и "удалить", добавленные в eventCard() - вызывать после
-// каждой вставки renderEventList()/renderGroupedByDate() в DOM.
+// Вешает обработчики на кнопки "сайт олимпиады", "скрыть" и "удалить",
+// добавленные в eventCard() - вызывать после каждой вставки
+// renderEventList()/renderGroupedByDate() в DOM.
 function bindCardActions(onChanged) {
-  content.querySelectorAll(".cal-link, .olympiad-link-btn").forEach((btn) => {
+  content.querySelectorAll(".olympiad-link-btn").forEach((btn) => {
     btn.onclick = (ev) => {
       ev.stopPropagation();
       haptic("light");
@@ -279,13 +245,6 @@ function bindCardActions(onChanged) {
       ev.stopPropagation();
       haptic("light");
       confirmHide(btn.dataset.id, btn.dataset.summary, onChanged);
-    };
-  });
-  content.querySelectorAll(".complete-btn").forEach((btn) => {
-    btn.onclick = (ev) => {
-      ev.stopPropagation();
-      haptic("medium");
-      toggleComplete(btn.dataset.id, btn.classList.contains("is-done"), onChanged);
     };
   });
 }
@@ -531,11 +490,10 @@ function renderCalendarGrid(cells, events, selectedDate) {
     const { items, laneCount } = packWeekLanes(weekDates, events);
     const barsHtml = items.map((it) => {
       const kind = it.event.olympiad_url ? "olympiad" : "other";
-      const doneClass = it.event.is_completed ? " is-completed" : "";
-      const icon = kind === "olympiad" ? (it.event.is_completed ? "✅ " : "🏅 ") : "";
+      const icon = kind === "olympiad" ? "🏅 " : "";
       const span = it.colEnd - it.colStart + 1;
       const style = `grid-column:${it.colStart + 1} / span ${span}; grid-row:${it.lane + 1};`;
-      return `<button type="button" class="cal-bar ${kind}${doneClass}" style="${style}" data-date="${it.dateStr}">${icon}${escapeHtml(it.event.summary)}</button>`;
+      return `<button type="button" class="cal-bar ${kind}" style="${style}" data-date="${it.dateStr}">${icon}${escapeHtml(it.event.summary)}</button>`;
     }).join("");
     const lanesHtml = laneCount
       ? `<div class="cal-week-lanes" style="grid-template-rows: repeat(${laneCount}, auto);">${barsHtml}</div>`
@@ -672,21 +630,16 @@ function shiftCalendarMonth(delta) {
 
 // Вкладка "Олимпиады" показывает не статичный справочник сайтов, а
 // распознанные олимпиадные события, реально вписанные в календарь - те
-// же карточки (с кнопками "выполнено"/"скрыть"/ссылкой на сайт), что и на
-// остальных вкладках. Если по какой-то олимпиаде в календаре пока нет
-// события - её здесь просто не будет, пока событие не появится.
+// же карточки (с кнопкой "скрыть"/ссылкой на сайт), что и на остальных
+// вкладках. Если по какой-то олимпиаде в календаре пока нет события - её
+// здесь просто не будет, пока событие не появится.
 async function showOlympiads() {
   titleEl.textContent = "Олимпиады";
   setSubtitle("");
   content.innerHTML = skeleton(4);
   try {
     const events = await api("/api/olympiads");
-    const doneCount = events.filter((e) => e.is_completed).length;
-    setSubtitle(
-      events.length
-        ? `${events.length} ${pluralEvents(events.length)}` + (doneCount ? ` · ${doneCount} выполнено` : "")
-        : ""
-    );
+    setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
     content.innerHTML = events.length
       ? renderGroupedByDate(events, { showDelete: STATE.is_admin, showHide: true })
       : emptyState("🏅", "В календаре пока нет распознанных олимпиадных событий");

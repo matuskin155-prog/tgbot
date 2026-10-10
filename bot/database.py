@@ -56,15 +56,6 @@ class Database:
                 )
                 """
             )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS completed_events (
-                    event_id TEXT PRIMARY KEY,
-                    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    completed_by_chat_id INTEGER
-                )
-                """
-            )
 
     def add_subscriber(self, chat_id: int) -> bool:
         with closing(self._connect()) as conn, conn:
@@ -170,39 +161,4 @@ class Database:
             rows = conn.execute(
                 "SELECT event_id FROM hidden_events WHERE chat_id = ?", (chat_id,)
             ).fetchall()
-            return {row[0] for row in rows}
-
-    def mark_event_completed(self, event_id: str, chat_id: int) -> None:
-        """Отмечает олимпиаду выполненной - это общий, а не персональный
-        признак (в отличие от hidden_events): раз зарегистрировались, это
-        факт для всей семьи, а не только для того, кто нажал кнопку."""
-        with closing(self._connect()) as conn, conn:
-            conn.execute(
-                """
-                INSERT INTO completed_events (event_id, completed_by_chat_id)
-                VALUES (?, ?)
-                ON CONFLICT(event_id) DO UPDATE SET
-                    completed_at = datetime('now'),
-                    completed_by_chat_id = excluded.completed_by_chat_id
-                """,
-                (event_id, chat_id),
-            )
-
-    def unmark_event_completed(self, event_id: str) -> bool:
-        with closing(self._connect()) as conn, conn:
-            cur = conn.execute(
-                "DELETE FROM completed_events WHERE event_id = ?", (event_id,)
-            )
-            return cur.rowcount > 0
-
-    def is_event_completed(self, event_id: str) -> bool:
-        with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT 1 FROM completed_events WHERE event_id = ?", (event_id,)
-            ).fetchone()
-            return row is not None
-
-    def get_completed_event_ids(self) -> Set[str]:
-        with closing(self._connect()) as conn:
-            rows = conn.execute("SELECT event_id FROM completed_events").fetchall()
             return {row[0] for row in rows}
