@@ -666,26 +666,30 @@ function shiftCalendarMonth(delta) {
   loadCalendarMonth();
 }
 
+// Вкладка "Олимпиады" показывает не статичный справочник сайтов, а
+// распознанные олимпиадные события, реально вписанные в календарь - те
+// же карточки (с кнопками "выполнено"/"скрыть"/ссылкой на сайт), что и на
+// остальных вкладках. Если по какой-то олимпиаде в календаре пока нет
+// события - её здесь просто не будет, пока событие не появится.
 async function showOlympiads() {
   titleEl.textContent = "Олимпиады";
   setSubtitle("");
-  let html = skeleton(4);
-  content.innerHTML = html;
+  content.innerHTML = skeleton(4);
   try {
-    const items = await api("/api/olympiads");
-    setSubtitle(`${items.length} олимпиад`);
-    html = items.map((o, i) => `
-      <div class="card" style="--i:${i}">
-        <a href="${o.url}" target="_blank" rel="noopener">
-          <div class="title">${escapeHtml(o.name)}</div>
-          <div class="olympiad-link">🔗 ${escapeHtml(new URL(o.url).hostname)}</div>
-        </a>
-      </div>
-    `).join("");
+    const events = await api("/api/olympiads");
+    const doneCount = events.filter((e) => e.is_completed).length;
+    setSubtitle(
+      events.length
+        ? `${events.length} ${pluralEvents(events.length)}` + (doneCount ? ` · ${doneCount} выполнено` : "")
+        : ""
+    );
+    content.innerHTML = events.length
+      ? renderGroupedByDate(events, { showDelete: STATE.is_admin, showHide: true })
+      : emptyState("🏅", "В календаре пока нет распознанных олимпиадных событий");
   } catch (e) {
-    html = emptyState("⚠️", "Ошибка: " + escapeHtml(e.message));
+    content.innerHTML = emptyState("⚠️", "Ошибка: " + escapeHtml(e.message));
   }
-  content.innerHTML = html;
+  bindCardActions(showOlympiads);
 }
 
 async function showSettings() {

@@ -12,11 +12,16 @@ from .database import Database
 from .digest import send_daily_digest
 from .formatting import format_event_line, format_time_range
 from .google_calendar import GoogleCalendarClient
-from .olympiads import SOURCES
+from .olympiads import olympiad_url_for
 from .reminders import check_reminders
 from .runtime_config import ConfigError, RuntimeConfig
 
 logger = logging.getLogger(__name__)
+
+# Горизонт для /olympiads - независимо от LOOKAHEAD_HOURS (тот обычно
+# короткий, рассчитан на напоминания), чтобы не пропустить олимпиаду,
+# которая уже вписана в календарь, но далеко впереди.
+OLYMPIADS_WINDOW_DAYS = 270
 
 WELCOME_TEXT = (
     "Привет! Я присылаю напоминания о событиях из общего Google Calendar — "
@@ -31,7 +36,7 @@ WELCOME_TEXT = (
     "/hidden_events — вернуть то, что вы скрыли\n"
     "/status — текущие настройки\n"
     "/whoami — узнать свой chat_id\n"
-    "/olympiads — список известных олимпиад\n\n"
+    "/olympiads — олимпиады, распознанные в календаре\n\n"
     "Каждый день в заданное время я также присылаю сводку событий на сегодня "
     "всем, кто подписан (/status покажет, во сколько)."
 )
@@ -583,13 +588,42 @@ async def handle_unhide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.edit_message_text("Возвращено — снова будет показываться и напоминать.")
 
 
-# --- Справочник сайтов олимпиад ---
+# --- Олимпиады, распознанные в календаре ---
 
 
 async def olympiads_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    lines = ["<b>Известные олимпиады:</b>"]
-    for source in SOURCES:
-        lines.append(f'• <a href="{source.url}">{escape(source.name)}</a>')
+    calendar: GoogleCalendarClient = context.bot_data["calendar"]
+    runtime: RuntimeConfig = context.bot_data["runtime_config"]
+    db: Database = context.bot_data["db"]
+
+    try:
+        events = await asyncio.to_thread(
+            calendar.get_upcoming_events, OLYMPIADS_WINDOW_DAYS * 24, runtime.calendar_id
+        )
+    except Exception:
+        logger.exception("Не удалось получить события для списка олимпиад")
+        await update.effective_message.reply_text("Не получилось получить события из календаря 😕")
+        return
+
+    hidden = db.get_hidden_event_ids_for_chat(update.effective_chat.id)
+    tz = ZoneInfo(runtime.timezone)
+    lines = ["<b>Олимпиады в календаре:</b>"]
+    for event in events:
+        if event.id in hidden:
+            continue
+        url = olympiad_url_for(event)
+        if not url:
+            continue
+        when = format_time_range(event, tz)
+        mark = " ✅" if db.is_event_completed(event.id) else ""
+        lines.append(f'• {when} — <a href="{url}">{escape(event.summary)}</a>{mark}')
+
+    if len(lines) == 1:
+        await update.effective_message.reply_text(
+            "В календаре пока нет распознанных олимпиадных событий."
+        )
+        return
+
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True
     )

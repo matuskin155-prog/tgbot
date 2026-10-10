@@ -31,7 +31,7 @@ BASE_COMMANDS = [
     BotCommand("hide_event", "Скрыть событие только у себя"),
     BotCommand("hidden_events", "Вернуть то, что вы скрыли"),
     BotCommand("status", "Текущие настройки и статус подписки"),
-    BotCommand("olympiads", "Список известных олимпиад"),
+    BotCommand("olympiads", "Олимпиады, распознанные в календаре"),
     BotCommand("whoami", "Узнать свой chat_id"),
     BotCommand("help", "Справка"),
 ]

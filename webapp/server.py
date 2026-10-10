@@ -12,7 +12,7 @@ from bot.config import Settings, load_settings
 from bot.database import Database
 from bot.formatting import event_end_date, format_time_range, is_event_ongoing
 from bot.google_calendar import CalendarEvent, GoogleCalendarClient
-from bot.olympiads import SOURCES, olympiad_url_for
+from bot.olympiads import olympiad_url_for
 from bot.runtime_config import ConfigError, Defaults, RuntimeConfig
 
 from .auth import InitDataError, validate_init_data
@@ -335,6 +335,16 @@ async def handle_events_uncomplete(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def _upcoming_olympiad_events(request: web.Request, chat_id: int) -> list:
+    """Распознанные олимпиадные события из календаря на
+    OLYMPIAD_DEADLINES_WINDOW_DAYS вперёд - общая выборка для вкладки
+    "Олимпиады" (все) и панели "Ближайшие дедлайны" (топ, без выполненных)."""
+    events = await _events_payload(
+        request, OLYMPIAD_DEADLINES_WINDOW_DAYS * 24, exclude_hidden_for=chat_id
+    )
+    return [e for e in events if e["olympiad_url"]]
+
+
 async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
     """Ближайшие по времени олимпиадные события (с датой начала или конца
     регистрации/отборочного этапа) для панели "Ближайшие дедлайны" на
@@ -342,23 +352,26 @@ async def handle_olympiad_deadlines(request: web.Request) -> web.Response:
     какой месяц сейчас открыт, чтобы дедлайн не потерялся где-то впереди."""
     auth = _require_auth(request)
     try:
-        events = await _events_payload(
-            request, OLYMPIAD_DEADLINES_WINDOW_DAYS * 24, exclude_hidden_for=auth["chat_id"]
-        )
+        olympiad_events = await _upcoming_olympiad_events(request, auth["chat_id"])
     except Exception:
         logger.exception("Не удалось получить ближайшие дедлайны олимпиад")
         raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
-    olympiad_events = [
-        e for e in events if e["olympiad_url"] and not e["is_completed"]
-    ][:OLYMPIAD_DEADLINES_LIMIT]
+    olympiad_events = [e for e in olympiad_events if not e["is_completed"]][:OLYMPIAD_DEADLINES_LIMIT]
     return web.json_response(olympiad_events)
 
 
 async def handle_olympiads(request: web.Request) -> web.Response:
-    _require_auth(request)
-    return web.json_response(
-        [{"key": source.key, "name": source.name, "url": source.url} for source in SOURCES]
-    )
+    """Все распознанные олимпиадные события из календаря (включая уже
+    отмеченные выполненными) для вкладки "Олимпиады" - в отличие от панели
+    дедлайнов на вкладке "Календарь", это полный список, а не только
+    ближайшее и ещё не выполненное."""
+    auth = _require_auth(request)
+    try:
+        olympiad_events = await _upcoming_olympiad_events(request, auth["chat_id"])
+    except Exception:
+        logger.exception("Не удалось получить олимпиадные события")
+        raise web.HTTPInternalServerError(text="Не получилось получить события из календаря")
+    return web.json_response(olympiad_events)
 
 
 async def handle_config_update(request: web.Request) -> web.Response:
