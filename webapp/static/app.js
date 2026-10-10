@@ -137,11 +137,23 @@ async function fetchMonthSummary() {
   }
 }
 
-function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false } = {}) {
+function eventCard(e, { tappable = false, index = 0, showDelete = false, showHide = false, showCountdown = false } = {}) {
   const liveClass = e.is_ongoing ? "is-live" : "";
   const olympiadClass = e.olympiad_url ? "is-olympiad" : "";
+  // Во вкладке "Олимпиады" (showCountdown) бейдж "🏅 олимпиада" избыточен -
+  // там и так все карточки олимпиадные, вместо него показываем самое
+  // полезное: сколько дней осталось до дедлайна регистрации/отборочного
+  // этапа (см. deadlineDaysLeft ниже - то же, чем считает лента на вкладке
+  // "Календарь").
+  const olympiadBadge = e.olympiad_url && !showCountdown ? '<span class="olympiad-badge">🏅 олимпиада</span>' : "";
+  const deadlineBadge = showCountdown && e.olympiad_url
+    ? (() => {
+        const days = deadlineDaysLeft(e);
+        const urgency = deadlineUrgency(days);
+        return `<span class="deadline-badge ${urgency}">⏳ ${deadlineLabel(days)}</span>`;
+      })()
+    : "";
   const liveBadge = e.is_ongoing ? '<span class="live-badge"><span class="live-dot"></span>сейчас</span>' : "";
-  const olympiadBadge = e.olympiad_url ? '<span class="olympiad-badge">🏅 олимпиада</span>' : "";
   const countdown = !e.is_ongoing && e.start_ts ? countdownText(e.start_ts) : null;
   const countdownBadge = countdown
     ? `<span class="countdown" data-start-ts="${escapeHtml(e.start_ts)}">${countdown}</span>`
@@ -175,6 +187,7 @@ function eventCard(e, { tappable = false, index = 0, showDelete = false, showHid
         <span class="time">${escapeHtml(e.when)}</span>
         ${liveBadge}
         ${olympiadBadge}
+        ${deadlineBadge}
         ${countdownBadge}
       </div>
       <div class="title">${escapeHtml(e.summary)}</div>
@@ -191,20 +204,6 @@ function emptyState(emoji, text) {
 function renderEventList(events, { emptyEmoji = "🌸", emptyText = "Событий нет", tappable = false, showDelete = false, showHide = false } = {}) {
   if (!events.length) return emptyState(emptyEmoji, emptyText);
   return events.map((e, i) => eventCard(e, { tappable, index: i, showDelete, showHide })).join("");
-}
-
-function renderGroupedByDate(events, { showDelete = false, showHide = false } = {}) {
-  if (!events.length) return emptyState("🌸", "Событий нет");
-  let html = "";
-  let lastDate = null;
-  events.forEach((e, i) => {
-    if (e.date !== lastDate) {
-      html += `<div class="date-heading">${dateHeading(e.date)}</div>`;
-      lastDate = e.date;
-    }
-    html += eventCard(e, { index: i, showDelete, showHide });
-  });
-  return html;
 }
 
 function confirmHide(eventId, summary, onDone) {
@@ -224,7 +223,7 @@ function confirmHide(eventId, summary, onDone) {
 
 // Вешает обработчики на кнопки "сайт олимпиады", "скрыть" и "удалить",
 // добавленные в eventCard() - вызывать после каждой вставки
-// renderEventList()/renderGroupedByDate() в DOM.
+// renderEventList()/renderOlympiadsByUrgency() в DOM.
 function bindCardActions(onChanged) {
   content.querySelectorAll(".olympiad-link-btn").forEach((btn) => {
     btn.onclick = (ev) => {
@@ -633,15 +632,47 @@ function shiftCalendarMonth(delta) {
 // же карточки (с кнопкой "скрыть"/ссылкой на сайт), что и на остальных
 // вкладках. Если по какой-то олимпиаде в календаре пока нет события - её
 // здесь просто не будет, пока событие не появится.
+// Группировка по срочности дедлайна, а не по хронологии - "Горит / Скоро /
+// Есть время", как в трекерах задач. Это и есть вся польза вкладки: сразу
+// видно, что требует внимания сейчас, а не просто список того, что лежит
+// в календаре в порядке дат начала.
+const OLYMPIAD_TIERS = [
+  { title: "🔥 Горит", test: (days) => days <= 2 },
+  { title: "⏳ Скоро", test: (days) => days > 2 && days <= 10 },
+  { title: "🗓 Есть время", test: (days) => days > 10 },
+];
+
+function renderOlympiadsByUrgency(events) {
+  const withDays = events
+    .map((e) => ({ e, days: deadlineDaysLeft(e) }))
+    .sort((a, b) => a.days - b.days);
+
+  let html = "";
+  for (const tier of OLYMPIAD_TIERS) {
+    const items = withDays.filter((x) => tier.test(x.days));
+    if (!items.length) continue;
+    html += `<div class="date-heading">${tier.title} (${items.length})</div>`;
+    html += items.map(({ e }, i) => eventCard(e, {
+      index: i, showDelete: STATE.is_admin, showHide: true, showCountdown: true,
+    })).join("");
+  }
+  return html;
+}
+
 async function showOlympiads() {
   titleEl.textContent = "Олимпиады";
   setSubtitle("");
   content.innerHTML = skeleton(4);
   try {
     const events = await api("/api/olympiads");
-    setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "");
+    const urgentCount = events.filter((e) => deadlineDaysLeft(e) <= 2).length;
+    setSubtitle(
+      events.length
+        ? `${events.length} ${pluralEvents(events.length)}` + (urgentCount ? ` · 🔥 ${urgentCount} горит` : "")
+        : ""
+    );
     content.innerHTML = events.length
-      ? renderGroupedByDate(events, { showDelete: STATE.is_admin, showHide: true })
+      ? renderOlympiadsByUrgency(events)
       : emptyState("🏅", "В календаре пока нет распознанных олимпиадных событий");
   } catch (e) {
     content.innerHTML = emptyState("⚠️", "Ошибка: " + escapeHtml(e.message));

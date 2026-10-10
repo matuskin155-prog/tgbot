@@ -281,6 +281,22 @@ button:focus-visible, a:focus-visible {
   padding: 3px 10px;
   border-radius: 20px;
 }
+
+/* Бейдж "осталось N дней" на вкладке "Олимпиады" (eventCard, showCountdown) -
+   те же цвета срочности, что у .deadline-chip на вкладке "Календарь". */
+.deadline-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--secondary);
+  background: var(--secondary-soft);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.deadline-badge.soon { color: #6b3f00; background: #ffdc7a; }
+.deadline-badge.urgent { color: #fff; background: var(--live); }
+
 .card .title { font-size: 17px; font-weight: 800; line-height: 1.3; }
 .card .loc {
   font-size: 13.5px;
