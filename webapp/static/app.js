@@ -269,6 +269,40 @@ async function loadState() {
   STATE = await api("/api/state");
 }
 
+// Милый маскот-компаньон наверху вкладки "Сегодня" - никакой новой
+// функции, просто реагирует бейджиком-настроением на то, сколько сегодня
+// дел, чтобы открывать приложение было чуточку приятнее.
+function moodSticker(events) {
+  const n = events.length;
+  let emoji, title, note;
+  if (n === 0) {
+    emoji = "🧸";
+    title = "Свободный денёк!";
+    note = "Ни одного дела — можно просто обниматься с мишкой";
+  } else if (n <= 2) {
+    emoji = "🌷";
+    title = "Денёк полегче";
+    note = `Всего ${n} ${pluralEvents(n)} — легко справитесь`;
+  } else if (n <= 4) {
+    emoji = "🐝";
+    title = "Рабочий ритм";
+    note = `${n} ${pluralEvents(n)} — держите темп, всё по плану`;
+  } else {
+    emoji = "🔥";
+    title = "Ого, горячий день!";
+    note = `${n} ${pluralEvents(n)} — соберитесь, и всё получится`;
+  }
+  return `
+    <div class="mood-card">
+      <div class="mood-sticker">${emoji}</div>
+      <div class="mood-text">
+        <div class="mood-title">${title}</div>
+        <div class="mood-note">${note}</div>
+      </div>
+    </div>
+  `;
+}
+
 async function showToday() {
   titleEl.textContent = "Сегодня";
   setSubtitle("");
@@ -279,7 +313,7 @@ async function showToday() {
   try {
     const [events, monthBlock] = await Promise.all([api("/api/events/today"), fetchMonthSummary()]);
     setSubtitle(events.length ? `${events.length} ${pluralEvents(events.length)}` : "Свободный день");
-    content.innerHTML = monthBlock + subBtn + renderEventList(events, {
+    content.innerHTML = moodSticker(events) + monthBlock + subBtn + renderEventList(events, {
       emptyEmoji: "🌸", emptyText: "Событий на сегодня нет", showDelete: STATE.is_admin, showHide: true,
     });
     bindCardActions(showToday);
